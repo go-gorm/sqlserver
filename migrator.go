@@ -23,6 +23,36 @@ func (m Migrator) HasTable(value interface{}) bool {
 	return count > 0
 }
 
+func (m Migrator) DropTable(values ...interface{}) error {
+	values = m.ReorderModels(values, false)
+	for i := len(values) - 1; i >= 0; i-- {
+		tx := m.DB.Session(&gorm.Session{})
+		if err := m.RunWithValue(values[i], func(stmt *gorm.Statement) error {
+			type constraint struct {
+				Name   string
+				Parent string
+			}
+			var constraints []constraint
+			err := tx.Raw("SELECT name, OBJECT_NAME(parent_object_id) as parent FROM sys.foreign_keys WHERE referenced_object_id = object_id(?)", stmt.Table).Scan(&constraints).Error
+
+			for _, c := range constraints {
+				if err == nil {
+					err = tx.Exec("ALTER TABLE ? DROP CONSTRAINT ?;", gorm.Expr(c.Parent), gorm.Expr(c.Name)).Error
+				}
+			}
+
+			if err == nil {
+				err = tx.Exec("DROP TABLE IF EXISTS ?", clause.Table{Name: stmt.Table}).Error
+			}
+
+			return err
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (m Migrator) RenameTable(oldName, newName interface{}) error {
 	var oldTable, newTable string
 	if v, ok := oldName.(string); ok {

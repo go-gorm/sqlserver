@@ -2,7 +2,6 @@ package sqlserver
 
 import (
 	"reflect"
-	"sort"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/callbacks"
@@ -100,23 +99,12 @@ func Create(db *gorm.DB) {
 			defer rows.Close()
 
 			if len(db.Statement.Schema.FieldsWithDefaultDBValue) > 0 {
-				sortedKeys := []string{}
-				for _, field := range db.Statement.Schema.FieldsWithDefaultDBValue {
-					sortedKeys = append(sortedKeys, field.DBName)
-				}
-				sort.Strings(sortedKeys)
-
-				returnningFields := make([]*schema.Field, len(sortedKeys))
-				for idx, key := range sortedKeys {
-					returnningFields[idx] = db.Statement.Schema.LookUpField(key)
-				}
-
-				values := make([]interface{}, len(returnningFields))
+				values := make([]interface{}, len(db.Statement.Schema.FieldsWithDefaultDBValue))
 
 				switch db.Statement.ReflectValue.Kind() {
 				case reflect.Slice, reflect.Array:
 					for rows.Next() {
-						for idx, field := range returnningFields {
+						for idx, field := range db.Statement.Schema.FieldsWithDefaultDBValue {
 							values[idx] = field.ReflectValueOf(db.Statement.ReflectValue.Index(int(db.RowsAffected))).Addr().Interface()
 						}
 
@@ -124,7 +112,7 @@ func Create(db *gorm.DB) {
 						db.AddError(rows.Scan(values...))
 					}
 				case reflect.Struct:
-					for idx, field := range returnningFields {
+					for idx, field := range db.Statement.Schema.FieldsWithDefaultDBValue {
 						values[idx] = field.ReflectValueOf(db.Statement.ReflectValue).Addr().Interface()
 					}
 
@@ -207,19 +195,13 @@ func MergeCreate(db *gorm.DB, onConflict clause.OnConflict) {
 
 func outputInserted(db *gorm.DB) {
 	if len(db.Statement.Schema.FieldsWithDefaultDBValue) > 0 {
-		sortedKeys := []string{}
-		for _, field := range db.Statement.Schema.FieldsWithDefaultDBValue {
-			sortedKeys = append(sortedKeys, field.DBName)
-		}
-		sort.Strings(sortedKeys)
-
 		db.Statement.WriteString(" OUTPUT")
-		for idx, key := range sortedKeys {
+		for idx, field := range db.Statement.Schema.FieldsWithDefaultDBValue {
 			if idx > 0 {
 				db.Statement.WriteString(",")
 			}
 			db.Statement.WriteString(" INSERTED.")
-			db.Statement.AddVar(db.Statement, clause.Column{Name: key})
+			db.Statement.AddVar(db.Statement, clause.Column{Name: field.DBName})
 		}
 	}
 }

@@ -144,7 +144,7 @@ func MergeCreate(db *gorm.DB, onConflict clause.OnConflict) {
 		db.Statement.WriteByte(')')
 	}
 
-	db.Statement.WriteString(") AS source (")
+	db.Statement.WriteString(") AS excluded (")
 	for idx, column := range values.Columns {
 		if idx > 0 {
 			db.Statement.WriteByte(',')
@@ -157,7 +157,7 @@ func MergeCreate(db *gorm.DB, onConflict clause.OnConflict) {
 	for _, field := range db.Statement.Schema.PrimaryFields {
 		where.Exprs = append(where.Exprs, clause.Eq{
 			Column: clause.Column{Table: db.Statement.Table, Name: field.DBName},
-			Value:  clause.Column{Table: "source", Name: field.DBName},
+			Value:  clause.Column{Table: "excluded", Name: field.DBName},
 		})
 	}
 	where.Build(db.Statement)
@@ -183,7 +183,7 @@ func MergeCreate(db *gorm.DB, onConflict clause.OnConflict) {
 			db.Statement.WriteByte(',')
 		}
 		db.Statement.WriteQuoted(clause.Column{
-			Table: "source",
+			Table: "excluded",
 			Name:  column.Name,
 		})
 	}

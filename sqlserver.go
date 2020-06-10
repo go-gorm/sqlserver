@@ -43,15 +43,27 @@ func (dialector Dialector) ClauseBuilders() map[string]clause.ClauseBuilder {
 	return map[string]clause.ClauseBuilder{
 		"LIMIT": func(c clause.Clause, builder clause.Builder) {
 			if limit, ok := c.Expression.(clause.Limit); ok {
+				if stmt, ok := builder.(*gorm.Statement); ok {
+					if _, ok := stmt.Clauses["ORDER BY"]; !ok {
+						if stmt.Schema != nil && stmt.Schema.PrioritizedPrimaryField != nil {
+							builder.WriteString("ORDER BY ")
+							builder.WriteQuoted(stmt.Schema.PrioritizedPrimaryField.DBName)
+							builder.WriteByte(' ')
+						} else {
+							builder.WriteString("ORDER BY (SELECT NULL) ")
+						}
+					}
+				}
+
 				if limit.Offset > 0 {
 					builder.WriteString("OFFSET ")
 					builder.WriteString(strconv.Itoa(limit.Offset))
-					builder.WriteString("ROWS")
+					builder.WriteString(" ROWS")
 				}
 
 				if limit.Limit > 0 {
 					if limit.Offset == 0 {
-						builder.WriteString(" OFFSET 0 ROWS")
+						builder.WriteString("OFFSET 0 ROW")
 					}
 					builder.WriteString(" FETCH NEXT ")
 					builder.WriteString(strconv.Itoa(limit.Limit))

@@ -18,8 +18,6 @@ func Create(db *gorm.DB) {
 
 	if db.Statement.SQL.String() == "" {
 		setIdentityInsert := false
-		c := db.Statement.Clauses["ON CONFLICT"]
-		onConflict, hasConflict := c.Expression.(clause.OnConflict)
 
 		if field := db.Statement.Schema.PrioritizedPrimaryField; field != nil {
 			setIdentityInsert = false
@@ -45,14 +43,19 @@ func Create(db *gorm.DB) {
 			}
 		}
 
+		var (
+			values                  = callbacks.ConvertToCreateValues(db.Statement)
+			c                       = db.Statement.Clauses["ON CONFLICT"]
+			onConflict, hasConflict = c.Expression.(clause.OnConflict)
+		)
 		if hasConflict && len(db.Statement.Schema.PrimaryFields) > 0 {
-			MergeCreate(db, onConflict)
+			MergeCreate(db, onConflict, values)
 		} else {
 			db.Statement.AddClauseIfNotExists(clause.Insert{Table: clause.Table{Name: db.Statement.Table}})
 			db.Statement.Build("INSERT")
 			db.Statement.WriteByte(' ')
 
-			db.Statement.AddClause(callbacks.ConvertToCreateValues(db.Statement))
+			db.Statement.AddClause(values)
 			if values, ok := db.Statement.Clauses["VALUES"].Expression.(clause.Values); ok {
 				if len(values.Columns) > 0 {
 					db.Statement.WriteByte('(')
@@ -128,9 +131,7 @@ func Create(db *gorm.DB) {
 	}
 }
 
-func MergeCreate(db *gorm.DB, onConflict clause.OnConflict) {
-	values := callbacks.ConvertToCreateValues(db.Statement)
-
+func MergeCreate(db *gorm.DB, onConflict clause.OnConflict, values clause.Values) {
 	db.Statement.WriteString("MERGE INTO ")
 	db.Statement.WriteQuoted(db.Statement.Table)
 	db.Statement.WriteString(" USING (VALUES")

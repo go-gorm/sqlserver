@@ -135,5 +135,5 @@ func (dialector Dialector) DataTypeOf(field *schema.Field) string {
 		return "varbinary(MAX)"
 	}
 
-	return ""
+	return field.DataType
 }

@@ -137,3 +137,13 @@ func (dialector Dialector) DataTypeOf(field *schema.Field) string {
 
 	return string(field.DataType)
 }
+
+func (dialectopr Dialector) SavePoint(tx *gorm.DB, name string) error {
+	tx.Exec("SAVE TRANSACTION " + name)
+	return nil
+}
+
+func (dialectopr Dialector) RollbackTo(tx *gorm.DB, name string) error {
+	tx.Exec("ROLLBACK TRANSACTION " + name)
+	return nil
+}

@@ -6,7 +6,6 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/callbacks"
 	"gorm.io/gorm/clause"
-	"gorm.io/gorm/schema"
 )
 
 func Create(db *gorm.DB) {
@@ -17,40 +16,54 @@ func Create(db *gorm.DB) {
 	}
 
 	if db.Statement.SQL.String() == "" {
-		setIdentityInsert := false
-
-		if field := db.Statement.Schema.PrioritizedPrimaryField; field != nil {
-			setIdentityInsert = false
-			switch db.Statement.ReflectValue.Kind() {
-			case reflect.Struct:
-				_, isZero := field.ValueOf(db.Statement.ReflectValue)
-				setIdentityInsert = !isZero
-			case reflect.Slice:
-				for i := 0; i < db.Statement.ReflectValue.Len(); i++ {
-					_, isZero := field.ValueOf(db.Statement.ReflectValue.Index(i))
-					setIdentityInsert = !isZero
-					break
-				}
-			}
-
-			if setIdentityInsert && (field.DataType == schema.Int || field.DataType == schema.Uint) {
-				setIdentityInsert = true
-				db.Statement.WriteString("SET IDENTITY_INSERT ")
-				db.Statement.WriteQuoted(db.Statement.Table)
-				db.Statement.WriteString(" ON;")
-			} else {
-				setIdentityInsert = false
-			}
-		}
-
 		var (
 			values                  = callbacks.ConvertToCreateValues(db.Statement)
 			c                       = db.Statement.Clauses["ON CONFLICT"]
 			onConflict, hasConflict = c.Expression.(clause.OnConflict)
 		)
-		if hasConflict && len(db.Statement.Schema.PrimaryFields) > 0 {
+
+		if hasConflict {
+			if len(db.Statement.Schema.PrimaryFields) > 0 {
+				columnsMap := map[string]bool{}
+				for _, column := range values.Columns {
+					columnsMap[column.Name] = true
+				}
+
+				for _, field := range db.Statement.Schema.PrimaryFields {
+					if _, ok := columnsMap[field.DBName]; !ok {
+						hasConflict = false
+					}
+				}
+			} else {
+				hasConflict = false
+			}
+		}
+
+		if hasConflict {
 			MergeCreate(db, onConflict, values)
 		} else {
+			setIdentityInsert := false
+
+			if field := db.Statement.Schema.PrioritizedPrimaryField; field != nil && field.AutoIncrement {
+				switch db.Statement.ReflectValue.Kind() {
+				case reflect.Struct:
+					_, isZero := field.ValueOf(db.Statement.ReflectValue)
+					setIdentityInsert = !isZero
+				case reflect.Slice:
+					for i := 0; i < db.Statement.ReflectValue.Len(); i++ {
+						_, isZero := field.ValueOf(db.Statement.ReflectValue.Index(i))
+						setIdentityInsert = !isZero
+						break
+					}
+				}
+
+				if setIdentityInsert {
+					db.Statement.WriteString("SET IDENTITY_INSERT ")
+					db.Statement.WriteQuoted(db.Statement.Table)
+					db.Statement.WriteString(" ON;")
+				}
+			}
+
 			db.Statement.AddClauseIfNotExists(clause.Insert{Table: clause.Table{Name: db.Statement.Table}})
 			db.Statement.Build("INSERT")
 			db.Statement.WriteByte(' ')
@@ -86,12 +99,12 @@ func Create(db *gorm.DB) {
 					db.Statement.WriteString("DEFAULT VALUES;")
 				}
 			}
-		}
 
-		if setIdentityInsert {
-			db.Statement.WriteString("SET IDENTITY_INSERT ")
-			db.Statement.WriteQuoted(db.Statement.Table)
-			db.Statement.WriteString(" OFF;")
+			if setIdentityInsert {
+				db.Statement.WriteString("SET IDENTITY_INSERT ")
+				db.Statement.WriteQuoted(db.Statement.Table)
+				db.Statement.WriteString(" OFF;")
+			}
 		}
 	}
 
@@ -106,9 +119,20 @@ func Create(db *gorm.DB) {
 
 				switch db.Statement.ReflectValue.Kind() {
 				case reflect.Slice, reflect.Array:
+					var hasPrimaryValues, nonePrimaryValues []int
+					for i := 0; i < db.Statement.ReflectValue.Len(); i++ {
+						if _, isZero := db.Statement.Schema.PrioritizedPrimaryField.ValueOf(db.Statement.ReflectValue.Index(i)); isZero {
+							nonePrimaryValues = append(nonePrimaryValues, i)
+						} else {
+							hasPrimaryValues = append([]int{i}, hasPrimaryValues...)
+						}
+					}
+					nonePrimaryValues = append(nonePrimaryValues, hasPrimaryValues...)
+
 					for rows.Next() {
 						for idx, field := range db.Statement.Schema.FieldsWithDefaultDBValue {
-							values[idx] = field.ReflectValueOf(db.Statement.ReflectValue.Index(int(db.RowsAffected))).Addr().Interface()
+							fieldValue := field.ReflectValueOf(db.Statement.ReflectValue.Index(nonePrimaryValues[db.RowsAffected]))
+							values[idx] = fieldValue.Addr().Interface()
 						}
 
 						db.RowsAffected++
@@ -170,23 +194,31 @@ func MergeCreate(db *gorm.DB, onConflict clause.OnConflict, values clause.Values
 
 	db.Statement.WriteString(" WHEN NOT MATCHED THEN INSERT (")
 
-	for idx, column := range values.Columns {
-		if idx > 0 {
-			db.Statement.WriteByte(',')
+	written := false
+	for _, column := range values.Columns {
+		if db.Statement.Schema.PrioritizedPrimaryField == nil || !db.Statement.Schema.PrioritizedPrimaryField.AutoIncrement || db.Statement.Schema.PrioritizedPrimaryField.DBName != column.Name {
+			if written {
+				db.Statement.WriteByte(',')
+			}
+			written = true
+			db.Statement.WriteQuoted(column.Name)
 		}
-		db.Statement.WriteQuoted(column.Name)
 	}
 
 	db.Statement.WriteString(") VALUES (")
 
-	for idx, column := range values.Columns {
-		if idx > 0 {
-			db.Statement.WriteByte(',')
+	written = false
+	for _, column := range values.Columns {
+		if db.Statement.Schema.PrioritizedPrimaryField == nil || !db.Statement.Schema.PrioritizedPrimaryField.AutoIncrement || db.Statement.Schema.PrioritizedPrimaryField.DBName != column.Name {
+			if written {
+				db.Statement.WriteByte(',')
+			}
+			written = true
+			db.Statement.WriteQuoted(clause.Column{
+				Table: "excluded",
+				Name:  column.Name,
+			})
 		}
-		db.Statement.WriteQuoted(clause.Column{
-			Table: "excluded",
-			Name:  column.Name,
-		})
 	}
 
 	db.Statement.WriteString(")")

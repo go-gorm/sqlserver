@@ -100,6 +100,16 @@ func (dialector Dialector) QuoteTo(writer clause.Writer, str string) {
 var numericPlaceholder = regexp.MustCompile("@p(\\d+)")
 
 func (dialector Dialector) Explain(sql string, vars ...interface{}) string {
+	for idx, v := range vars {
+		if b, ok := v.(bool); ok {
+			if b {
+				vars[idx] = 1
+			} else {
+				vars[idx] = 0
+			}
+		}
+	}
+
 	return logger.ExplainSQL(sql, numericPlaceholder, `'`, vars...)
 }
 

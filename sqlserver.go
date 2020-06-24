@@ -126,7 +126,8 @@ func (dialector Dialector) DataTypeOf(field *schema.Field) string {
 		return "float"
 	case schema.String:
 		size := field.Size
-		if field.PrimaryKey && size == 0 {
+		hasIndex := field.TagSettings["INDEX"] != "" || field.TagSettings["UNIQUE"] != ""
+		if (field.PrimaryKey || hasIndex) && size == 0 {
 			size = 256
 		}
 		if size > 0 && size <= 4000 {

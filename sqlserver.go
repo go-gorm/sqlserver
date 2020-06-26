@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
+	"strings"
 
 	_ "github.com/denisenkom/go-mssqldb"
 	"gorm.io/gorm"
@@ -93,8 +94,18 @@ func (dialector Dialector) BindVarTo(writer clause.Writer, stmt *gorm.Statement,
 
 func (dialector Dialector) QuoteTo(writer clause.Writer, str string) {
 	writer.WriteByte('"')
-	writer.WriteString(str)
-	writer.WriteByte('"')
+	if strings.Contains(str, ".") {
+		for idx, str := range strings.Split(str, ".") {
+			if idx > 0 {
+				writer.WriteString(`."`)
+			}
+			writer.WriteString(str)
+			writer.WriteByte('"')
+		}
+	} else {
+		writer.WriteString(str)
+		writer.WriteByte('"')
+	}
 }
 
 var numericPlaceholder = regexp.MustCompile("@p(\\d+)")

@@ -139,7 +139,7 @@ func (dialector Dialector) DataTypeOf(field *schema.Field) string {
 			sqlType = "bigint"
 		}
 
-		if field.AutoIncrement || field == field.Schema.PrioritizedPrimaryField {
+		if field.AutoIncrement {
 			return sqlType + " IDENTITY(1,1)"
 		}
 		return sqlType

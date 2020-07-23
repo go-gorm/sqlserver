@@ -49,7 +49,7 @@ func Create(db *gorm.DB) {
 				case reflect.Struct:
 					_, isZero := field.ValueOf(db.Statement.ReflectValue)
 					setIdentityInsert = !isZero
-				case reflect.Slice:
+				case reflect.Slice, reflect.Array:
 					for i := 0; i < db.Statement.ReflectValue.Len(); i++ {
 						_, isZero := field.ValueOf(db.Statement.ReflectValue.Index(i))
 						setIdentityInsert = !isZero
@@ -127,16 +127,17 @@ func Create(db *gorm.DB) {
 							hasPrimaryValues = append([]int{i}, hasPrimaryValues...)
 						}
 					}
-					nonePrimaryValues = append(nonePrimaryValues, hasPrimaryValues...)
 
 					for rows.Next() {
-						for idx, field := range db.Statement.Schema.FieldsWithDefaultDBValue {
-							fieldValue := field.ReflectValueOf(db.Statement.ReflectValue.Index(nonePrimaryValues[db.RowsAffected]))
-							values[idx] = fieldValue.Addr().Interface()
-						}
+						if int(db.RowsAffected) < len(nonePrimaryValues) {
+							for idx, field := range db.Statement.Schema.FieldsWithDefaultDBValue {
+								fieldValue := field.ReflectValueOf(db.Statement.ReflectValue.Index(nonePrimaryValues[db.RowsAffected]))
+								values[idx] = fieldValue.Addr().Interface()
+							}
 
+							db.AddError(rows.Scan(values...))
+						}
 						db.RowsAffected++
-						db.AddError(rows.Scan(values...))
 					}
 				case reflect.Struct:
 					for idx, field := range db.Statement.Schema.FieldsWithDefaultDBValue {

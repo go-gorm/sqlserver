@@ -64,7 +64,7 @@ func Create(db *gorm.DB) {
 				}
 			}
 
-			db.Statement.AddClauseIfNotExists(clause.Insert{Table: clause.Table{Name: db.Statement.Table}})
+			db.Statement.AddClauseIfNotExists(clause.Insert{})
 			db.Statement.Build("INSERT")
 			db.Statement.WriteByte(' ')
 

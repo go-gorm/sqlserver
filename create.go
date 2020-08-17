@@ -51,8 +51,11 @@ func Create(db *gorm.DB) {
 					setIdentityInsert = !isZero
 				case reflect.Slice, reflect.Array:
 					for i := 0; i < db.Statement.ReflectValue.Len(); i++ {
-						_, isZero := field.ValueOf(db.Statement.ReflectValue.Index(i))
-						setIdentityInsert = !isZero
+						obj := db.Statement.ReflectValue.Index(i)
+						if reflect.Indirect(obj).Kind() == reflect.Struct {
+							_, isZero := field.ValueOf(db.Statement.ReflectValue.Index(i))
+							setIdentityInsert = !isZero
+						}
 						break
 					}
 				}
@@ -121,7 +124,12 @@ func Create(db *gorm.DB) {
 				case reflect.Slice, reflect.Array:
 					var hasPrimaryValues, nonePrimaryValues []int
 					for i := 0; i < db.Statement.ReflectValue.Len(); i++ {
-						if _, isZero := db.Statement.Schema.PrioritizedPrimaryField.ValueOf(db.Statement.ReflectValue.Index(i)); isZero {
+						obj := db.Statement.ReflectValue.Index(i)
+						if reflect.Indirect(obj).Kind() != reflect.Struct {
+							return
+						}
+
+						if _, isZero := db.Statement.Schema.PrioritizedPrimaryField.ValueOf(obj); isZero {
 							nonePrimaryValues = append(nonePrimaryValues, i)
 						} else {
 							hasPrimaryValues = append([]int{i}, hasPrimaryValues...)

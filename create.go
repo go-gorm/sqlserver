@@ -44,26 +44,28 @@ func Create(db *gorm.DB) {
 		} else {
 			setIdentityInsert := false
 
-			if field := db.Statement.Schema.PrioritizedPrimaryField; field != nil && field.AutoIncrement {
-				switch db.Statement.ReflectValue.Kind() {
-				case reflect.Struct:
-					_, isZero := field.ValueOf(db.Statement.ReflectValue)
-					setIdentityInsert = !isZero
-				case reflect.Slice, reflect.Array:
-					for i := 0; i < db.Statement.ReflectValue.Len(); i++ {
-						obj := db.Statement.ReflectValue.Index(i)
-						if reflect.Indirect(obj).Kind() == reflect.Struct {
-							_, isZero := field.ValueOf(db.Statement.ReflectValue.Index(i))
-							setIdentityInsert = !isZero
+			if db.Statement.Schema != nil {
+				if field := db.Statement.Schema.PrioritizedPrimaryField; field != nil && field.AutoIncrement {
+					switch db.Statement.ReflectValue.Kind() {
+					case reflect.Struct:
+						_, isZero := field.ValueOf(db.Statement.ReflectValue)
+						setIdentityInsert = !isZero
+					case reflect.Slice, reflect.Array:
+						for i := 0; i < db.Statement.ReflectValue.Len(); i++ {
+							obj := db.Statement.ReflectValue.Index(i)
+							if reflect.Indirect(obj).Kind() == reflect.Struct {
+								_, isZero := field.ValueOf(db.Statement.ReflectValue.Index(i))
+								setIdentityInsert = !isZero
+							}
+							break
 						}
-						break
 					}
-				}
 
-				if setIdentityInsert {
-					db.Statement.WriteString("SET IDENTITY_INSERT ")
-					db.Statement.WriteQuoted(db.Statement.Table)
-					db.Statement.WriteString(" ON;")
+					if setIdentityInsert {
+						db.Statement.WriteString("SET IDENTITY_INSERT ")
+						db.Statement.WriteQuoted(db.Statement.Table)
+						db.Statement.WriteString(" ON;")
+					}
 				}
 			}
 
@@ -236,7 +238,7 @@ func MergeCreate(db *gorm.DB, onConflict clause.OnConflict, values clause.Values
 }
 
 func outputInserted(db *gorm.DB) {
-	if len(db.Statement.Schema.FieldsWithDefaultDBValue) > 0 {
+	if db.Statement.Schema != nil && len(db.Statement.Schema.FieldsWithDefaultDBValue) > 0 {
 		db.Statement.WriteString(" OUTPUT")
 		for idx, field := range db.Statement.Schema.FieldsWithDefaultDBValue {
 			if idx > 0 {

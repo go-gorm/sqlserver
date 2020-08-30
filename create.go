@@ -114,12 +114,12 @@ func Create(db *gorm.DB) {
 	}
 
 	if !db.DryRun {
-		rows, err := db.Statement.ConnPool.QueryContext(db.Statement.Context, db.Statement.SQL.String(), db.Statement.Vars...)
+		if len(db.Statement.Schema.FieldsWithDefaultDBValue) > 0 {
+			rows, err := db.Statement.ConnPool.QueryContext(db.Statement.Context, db.Statement.SQL.String(), db.Statement.Vars...)
 
-		if err == nil {
-			defer rows.Close()
+			if err == nil {
+				defer rows.Close()
 
-			if len(db.Statement.Schema.FieldsWithDefaultDBValue) > 0 {
 				values := make([]interface{}, len(db.Statement.Schema.FieldsWithDefaultDBValue))
 
 				switch db.Statement.ReflectValue.Kind() {
@@ -159,9 +159,15 @@ func Create(db *gorm.DB) {
 						db.AddError(rows.Scan(values...))
 					}
 				}
+			} else {
+				db.AddError(err)
 			}
 		} else {
-			db.AddError(err)
+			result, err := db.Statement.ConnPool.ExecContext(db.Statement.Context, db.Statement.SQL.String(), db.Statement.Vars...)
+			db.RowsAffected, _ = result.RowsAffected()
+			if err != nil {
+				db.AddError(err)
+			}
 		}
 	}
 }

@@ -16,8 +16,14 @@ import (
 	"gorm.io/gorm/schema"
 )
 
+type Config struct {
+	DriverName string
+	DSN        string
+	Conn       gorm.ConnPool
+}
+
 type Dialector struct {
-	DSN string
+	*Config
 }
 
 func (dialector Dialector) Name() string {
@@ -25,14 +31,31 @@ func (dialector Dialector) Name() string {
 }
 
 func Open(dsn string) gorm.Dialector {
-	return &Dialector{DSN: dsn}
+	return &Dialector{Config: &Config{DSN: dsn}}
+}
+
+func New(config Config) gorm.Dialector {
+	return &Dialector{Config: &config}
 }
 
 func (dialector Dialector) Initialize(db *gorm.DB) (err error) {
+
 	// register callbacks
 	callbacks.RegisterDefaultCallbacks(db, &callbacks.Config{})
 	db.Callback().Create().Replace("gorm:create", Create)
-	db.ConnPool, err = sql.Open("sqlserver", dialector.DSN)
+
+	if dialector.DriverName == "" {
+		dialector.DriverName = "sqlserver"
+	}
+
+	if dialector.Conn != nil {
+		db.ConnPool = dialector.Conn
+	} else {
+		db.ConnPool, err = sql.Open(dialector.DriverName, dialector.DSN)
+		if err != nil {
+			return err
+		}
+	}
 
 	for k, v := range dialector.ClauseBuilders() {
 		db.ClauseBuilders[k] = v

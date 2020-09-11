@@ -164,9 +164,8 @@ func Create(db *gorm.DB) {
 			}
 		} else {
 			result, err := db.Statement.ConnPool.ExecContext(db.Statement.Context, db.Statement.SQL.String(), db.Statement.Vars...)
-			db.RowsAffected, _ = result.RowsAffected()
-			if err != nil {
-				db.AddError(err)
+			if db.AddError(err) == nil {
+				db.RowsAffected, _ = result.RowsAffected()
 			}
 		}
 	}

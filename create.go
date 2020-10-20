@@ -159,6 +159,8 @@ func Create(db *gorm.DB) {
 						db.AddError(rows.Scan(values...))
 					}
 				}
+
+				db.AddError(rows.Err())
 			} else {
 				db.AddError(err)
 			}

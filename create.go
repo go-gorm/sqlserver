@@ -1,11 +1,13 @@
 package sqlserver
 
 import (
+	"database/sql"
 	"reflect"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/callbacks"
 	"gorm.io/gorm/clause"
+	"gorm.io/gorm/schema"
 )
 
 func Create(db *gorm.DB) {
@@ -120,8 +122,6 @@ func Create(db *gorm.DB) {
 			if err == nil {
 				defer rows.Close()
 
-				values := make([]interface{}, len(db.Statement.Schema.FieldsWithDefaultDBValue))
-
 				switch db.Statement.ReflectValue.Kind() {
 				case reflect.Slice, reflect.Array:
 					var hasPrimaryValues, nonePrimaryValues []int
@@ -140,23 +140,15 @@ func Create(db *gorm.DB) {
 
 					for rows.Next() {
 						if int(db.RowsAffected) < len(nonePrimaryValues) {
-							for idx, field := range db.Statement.Schema.FieldsWithDefaultDBValue {
-								fieldValue := field.ReflectValueOf(db.Statement.ReflectValue.Index(nonePrimaryValues[db.RowsAffected]))
-								values[idx] = fieldValue.Addr().Interface()
-							}
-
-							db.AddError(rows.Scan(values...))
+							values := db.Statement.ReflectValue.Index(nonePrimaryValues[db.RowsAffected])
+							db.AddError(ScanAcceNil(rows, db.Statement.Schema.FieldsWithDefaultDBValue, &values))
 						}
 						db.RowsAffected++
 					}
 				case reflect.Struct:
-					for idx, field := range db.Statement.Schema.FieldsWithDefaultDBValue {
-						values[idx] = field.ReflectValueOf(db.Statement.ReflectValue).Addr().Interface()
-					}
-
 					if rows.Next() {
 						db.RowsAffected++
-						db.AddError(rows.Scan(values...))
+						db.AddError(ScanAcceNil(rows, db.Statement.Schema.FieldsWithDefaultDBValue, &db.Statement.ReflectValue))
 					}
 				}
 
@@ -171,6 +163,31 @@ func Create(db *gorm.DB) {
 			}
 		}
 	}
+}
+
+//Reading data from scan to ReflectValue, allows nil data from scan to ReflectValue
+func ScanAcceNil(rows *sql.Rows, fields []*schema.Field, reflectValue *reflect.Value) error {
+	var fieldPtrs []interface{} = make([]interface{}, len(fields))
+
+	for idx, field := range fields {
+		if field.NotNull {
+			fieldPtrs[idx] = field.ReflectValueOf(*reflectValue).Addr().Interface()
+			continue
+		}
+		fieldPtrs[idx] = reflect.New(reflect.PtrTo(field.IndirectFieldType)).Interface()
+	}
+
+	if err := rows.Scan(fieldPtrs...); err != nil {
+		return err
+	}
+
+	for idx, fieldPtr := range fieldPtrs {
+
+		if !fields[idx].NotNull && fieldPtr != nil {
+			fields[idx].Set(*reflectValue, fieldPtr)
+		}
+	}
+	return nil
 }
 
 func MergeCreate(db *gorm.DB, onConflict clause.OnConflict, values clause.Values) {

@@ -19,7 +19,7 @@ import (
 type Config struct {
 	DriverName        string
 	DSN               string
-	DefaultStringSize string
+	DefaultStringSize int
 	Conn              gorm.ConnPool
 }
 

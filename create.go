@@ -131,8 +131,10 @@ func Create(db *gorm.DB) {
 							return
 						}
 
-						if _, isZero := db.Statement.Schema.PrioritizedPrimaryField.ValueOf(obj); isZero {
-							nonePrimaryValues = append(nonePrimaryValues, i)
+						if db.Statement.Schema.PrioritizedPrimaryField != nil {
+							if _, isZero := db.Statement.Schema.PrioritizedPrimaryField.ValueOf(obj); isZero {
+								nonePrimaryValues = append(nonePrimaryValues, i)
+							}
 						} else {
 							hasPrimaryValues = append([]int{i}, hasPrimaryValues...)
 						}

@@ -9,6 +9,10 @@ import (
 )
 
 func Create(db *gorm.DB) {
+	if db.Error != nil {
+		return
+	}
+
 	if db.Statement.Schema != nil && !db.Statement.Unscoped {
 		for _, c := range db.Statement.Schema.CreateClauses {
 			db.Statement.AddClause(c)

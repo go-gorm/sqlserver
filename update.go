@@ -10,5 +10,5 @@ func Update(db *gorm.DB) {
 		db.Statement.Omits = append(db.Statement.Omits, db.Statement.Schema.PrioritizedPrimaryField.DBName)
 	}
 
-	callbacks.Update(db)
+	callbacks.Update(&callbacks.Config{})(db)
 }

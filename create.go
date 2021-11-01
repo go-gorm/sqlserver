@@ -120,55 +120,9 @@ func Create(db *gorm.DB) {
 	if !db.DryRun && db.Error == nil {
 		if len(db.Statement.Schema.FieldsWithDefaultDBValue) > 0 {
 			rows, err := db.Statement.ConnPool.QueryContext(db.Statement.Context, db.Statement.SQL.String(), db.Statement.Vars...)
-
-			if err == nil {
+			if db.AddError(err) == nil {
 				defer rows.Close()
-
-				values := make([]interface{}, len(db.Statement.Schema.FieldsWithDefaultDBValue))
-
-				switch db.Statement.ReflectValue.Kind() {
-				case reflect.Slice, reflect.Array:
-					var hasPrimaryValues, nonePrimaryValues []int
-					for i := 0; i < db.Statement.ReflectValue.Len(); i++ {
-						obj := db.Statement.ReflectValue.Index(i)
-						if reflect.Indirect(obj).Kind() != reflect.Struct {
-							return
-						}
-
-						if db.Statement.Schema.PrioritizedPrimaryField != nil {
-							if _, isZero := db.Statement.Schema.PrioritizedPrimaryField.ValueOf(obj); isZero {
-								nonePrimaryValues = append(nonePrimaryValues, i)
-							}
-						} else {
-							hasPrimaryValues = append([]int{i}, hasPrimaryValues...)
-						}
-					}
-
-					for rows.Next() {
-						if int(db.RowsAffected) < len(nonePrimaryValues) {
-							for idx, field := range db.Statement.Schema.FieldsWithDefaultDBValue {
-								fieldValue := field.ReflectValueOf(db.Statement.ReflectValue.Index(nonePrimaryValues[db.RowsAffected]))
-								values[idx] = fieldValue.Addr().Interface()
-							}
-
-							db.AddError(rows.Scan(values...))
-						}
-						db.RowsAffected++
-					}
-				case reflect.Struct:
-					for idx, field := range db.Statement.Schema.FieldsWithDefaultDBValue {
-						values[idx] = field.ReflectValueOf(db.Statement.ReflectValue).Addr().Interface()
-					}
-
-					if rows.Next() {
-						db.RowsAffected++
-						db.AddError(rows.Scan(values...))
-					}
-				}
-
-				db.AddError(rows.Err())
-			} else {
-				db.AddError(err)
+				gorm.Scan(rows, db, gorm.ScanUpdate|gorm.ScanOnConflictDoNothing)
 			}
 		} else {
 			result, err := db.Statement.ConnPool.ExecContext(db.Statement.Context, db.Statement.SQL.String(), db.Statement.Vars...)

@@ -12,6 +12,10 @@ type Migrator struct {
 	migrator.Migrator
 }
 
+func (m Migrator) GetTables() (tableList []string, err error) {
+	return tableList, m.DB.Raw("SELECT table_name FROM INFORMATION_SCHEMA.tables WHERE  table_catalog = ?", m.CurrentDatabase()).Scan(&tableList).Error
+}
+
 func (m Migrator) HasTable(value interface{}) bool {
 	var count int
 	m.RunWithValue(value, func(stmt *gorm.Statement) error {

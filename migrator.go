@@ -234,7 +234,7 @@ func (m Migrator) HasConstraint(value interface{}, name string) bool {
 		}
 
 		return m.DB.Raw(
-			`SELECT count(*) FROM sys.foreign_keys as F inner join sys.tables as T on F.parent_object_id=T.object_id inner join information_schema.tables as I on I.TABLE_NAME = T.name WHERE F.name = ?  AND T.Name = ? AND I.TABLE_CATALOG = ?;`,
+			`SELECT count(*) FROM sys.foreign_keys as F inner join sys.tables as T on F.parent_object_id=T.object_id inner join information_schema.tables as I on I.TABLE_NAME = T.name WHERE F.name = ?  AND T.object_id = OBJECT_ID(?) AND I.TABLE_CATALOG = ?;`,
 			name, table, m.CurrentDatabase(),
 		).Row().Scan(&count)
 	})

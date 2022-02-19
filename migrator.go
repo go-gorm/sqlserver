@@ -111,14 +111,16 @@ func (m Migrator) HasColumn(value interface{}, field string) bool {
 func (m Migrator) AlterColumn(value interface{}, field string) error {
 	return m.RunWithValue(value, func(stmt *gorm.Statement) error {
 		if field := stmt.Schema.LookUpField(field); field != nil {
-			fileType := clause.Expr{SQL: m.DataTypeOf(field)}
+			fieldType := clause.Expr{SQL: m.DataTypeOf(field)}
 			if field.NotNull {
-				fileType.SQL += " NOT NULL"
+				fieldType.SQL += " NOT NULL"
+			} else {
+				fieldType.SQL += " NULL"
 			}
 
 			return m.DB.Exec(
 				"ALTER TABLE ? ALTER COLUMN ? ?",
-				clause.Table{Name: stmt.Table}, clause.Column{Name: field.DBName}, fileType,
+				clause.Table{Name: stmt.Table}, clause.Column{Name: field.DBName}, fieldType,
 			).Error
 		}
 		return fmt.Errorf("failed to look up field with name: %s", field)
@@ -171,7 +173,10 @@ func (m Migrator) ColumnTypes(value interface{}) ([]gorm.ColumnType, error) {
 
 		for columns.Next() {
 			var (
-				column            migrator.ColumnType
+				column = migrator.ColumnType{
+					PrimaryKeyValue: sql.NullBool{Valid: true},
+					UniqueValue:     sql.NullBool{Valid: true},
+				}
 				datetimePrecision sql.NullInt64
 				radixValue        sql.NullInt64
 				nullableValue     sql.NullString
@@ -198,6 +203,8 @@ func (m Migrator) ColumnTypes(value interface{}) ([]gorm.ColumnType, error) {
 					column.DefaultValueValue.String = matches[1]
 					matches = defaultValueTrimRegexp.FindStringSubmatch(column.DefaultValueValue.String)
 				}
+			} else {
+				column.DefaultValueValue.Valid = true
 			}
 
 			for _, c := range rawColumnTypes {
@@ -224,7 +231,7 @@ func (m Migrator) ColumnTypes(value interface{}) ([]gorm.ColumnType, error) {
 				if mc.NameValue.String == name {
 					switch columnType {
 					case "PRIMARY KEY":
-						mc.PrimayKeyValue = sql.NullBool{Bool: true, Valid: true}
+						mc.PrimaryKeyValue = sql.NullBool{Bool: true, Valid: true}
 					case "UNIQUE":
 						mc.UniqueValue = sql.NullBool{Bool: true, Valid: true}
 					}

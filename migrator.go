@@ -1,7 +1,10 @@
 package sqlserver
 
 import (
+	"database/sql"
 	"fmt"
+	"regexp"
+	"strings"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -137,6 +140,104 @@ func (m Migrator) RenameColumn(value interface{}, oldName, newName string) error
 			fmt.Sprintf("%s.%s", stmt.Table, oldName), clause.Column{Name: newName},
 		).Error
 	})
+}
+
+var defaultValueTrimRegexp = regexp.MustCompile("^\\('?(.*)'?\\)$")
+
+// ColumnTypes return columnTypes []gorm.ColumnType and execErr error
+func (m Migrator) ColumnTypes(value interface{}) ([]gorm.ColumnType, error) {
+	columnTypes := make([]gorm.ColumnType, 0)
+	execErr := m.RunWithValue(value, func(stmt *gorm.Statement) (err error) {
+		rows, err := m.DB.Session(&gorm.Session{}).Table(stmt.Table).Limit(1).Rows()
+		if err != nil {
+			return err
+		}
+
+		defer func() {
+			err = rows.Close()
+		}()
+
+		var (
+			rawColumnTypes, _ = rows.ColumnTypes()
+			columnTypeSQL     = "SELECT column_name, data_type, column_default, is_nullable, character_maximum_length, numeric_precision, numeric_precision_radix, numeric_scale, datetime_precision FROM INFORMATION_SCHEMA.COLUMNS WHERE table_catalog = ? AND table_name = ?"
+			columns, rowErr   = m.DB.Raw(columnTypeSQL, m.CurrentDatabase(), stmt.Table).Rows()
+		)
+
+		if rowErr != nil {
+			return rowErr
+		}
+
+		defer columns.Close()
+
+		for columns.Next() {
+			var (
+				column            migrator.ColumnType
+				datetimePrecision sql.NullInt64
+				radixValue        sql.NullInt64
+				nullableValue     sql.NullString
+				values            = []interface{}{
+					&column.NameValue, &column.ColumnTypeValue, &column.DefaultValueValue, &nullableValue, &column.LengthValue, &column.DecimalSizeValue, &radixValue, &column.ScaleValue, &datetimePrecision,
+				}
+			)
+
+			if scanErr := columns.Scan(values...); scanErr != nil {
+				return scanErr
+			}
+
+			if nullableValue.Valid {
+				column.NullableValue = sql.NullBool{Bool: strings.EqualFold(nullableValue.String, "YES"), Valid: true}
+			}
+
+			if datetimePrecision.Valid {
+				column.DecimalSizeValue = datetimePrecision
+			}
+
+			if column.DefaultValueValue.Valid {
+				matches := defaultValueTrimRegexp.FindStringSubmatch(column.DefaultValueValue.String)
+				for len(matches) > 1 {
+					column.DefaultValueValue.String = matches[1]
+					matches = defaultValueTrimRegexp.FindStringSubmatch(column.DefaultValueValue.String)
+				}
+			}
+
+			for _, c := range rawColumnTypes {
+				if c.Name() == column.NameValue.String {
+					column.SQLColumnType = c
+					break
+				}
+			}
+
+			columnTypes = append(columnTypes, column)
+		}
+
+		columnTypeRows, err := m.DB.Raw("SELECT c.column_name, t.constraint_type FROM information_schema.table_constraints t JOIN information_schema.constraint_column_usage c ON c.constraint_name=t.constraint_name WHERE t.constraint_type IN ('PRIMARY KEY', 'UNIQUE') AND c.table_catalog = ? AND c.table_name = ?", m.CurrentDatabase(), stmt.Table).Rows()
+		if err != nil {
+			return err
+		}
+		defer columnTypeRows.Close()
+
+		for columnTypeRows.Next() {
+			var name, columnType string
+			columnTypeRows.Scan(&name, &columnType)
+			for idx, c := range columnTypes {
+				mc := c.(migrator.ColumnType)
+				if mc.NameValue.String == name {
+					switch columnType {
+					case "PRIMARY KEY":
+						mc.PrimayKeyValue = sql.NullBool{Bool: true, Valid: true}
+					case "UNIQUE":
+						mc.UniqueValue = sql.NullBool{Bool: true, Valid: true}
+					}
+					columnTypes[idx] = mc
+					break
+				}
+			}
+		}
+
+		return
+	})
+
+	return columnTypes, execErr
 }
 
 func (m Migrator) HasIndex(value interface{}, name string) bool {

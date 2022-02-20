@@ -157,10 +157,8 @@ func (dialector Dialector) DataTypeOf(field *schema.Field) string {
 		var sqlType string
 		switch {
 		case field.Size < 16:
-			sqlType = "tinyint"
-		case field.Size < 31:
 			sqlType = "smallint"
-		case field.Size < 64:
+		case field.Size < 31:
 			sqlType = "int"
 		default:
 			sqlType = "bigint"

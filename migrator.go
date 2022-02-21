@@ -59,34 +59,6 @@ func (m Migrator) HasTable(value interface{}) bool {
 	return count > 0
 }
 
-// ColumnTypes return columnTypes []gorm.ColumnType and execErr error
-func (m Migrator) ColumnTypes(value interface{}) ([]gorm.ColumnType, error) {
-	columnTypes := make([]gorm.ColumnType, 0)
-	execErr := m.RunWithValue(value, func(stmt *gorm.Statement) error {
-
-		rows, err := m.DB.Session(&gorm.Session{}).Table(getFullQualifiedTableName(stmt)).Limit(1).Rows()
-		if err != nil {
-			return err
-		}
-
-		defer rows.Close()
-
-		var rawColumnTypes []*sql.ColumnType
-		rawColumnTypes, err = rows.ColumnTypes()
-		if err != nil {
-			return err
-		}
-
-		for _, c := range rawColumnTypes {
-			columnTypes = append(columnTypes, c)
-		}
-
-		return nil
-	})
-
-	return columnTypes, execErr
-}
-
 func (m Migrator) DropTable(values ...interface{}) error {
 	values = m.ReorderModels(values, false)
 	for i := len(values) - 1; i >= 0; i-- {
@@ -207,7 +179,7 @@ var defaultValueTrimRegexp = regexp.MustCompile("^\\('?(.*)'?\\)$")
 func (m Migrator) ColumnTypes(value interface{}) ([]gorm.ColumnType, error) {
 	columnTypes := make([]gorm.ColumnType, 0)
 	execErr := m.RunWithValue(value, func(stmt *gorm.Statement) (err error) {
-		rows, err := m.DB.Session(&gorm.Session{}).Table(stmt.Table).Limit(1).Rows()
+		rows, err := m.DB.Session(&gorm.Session{}).Table(getFullQualifiedTableName(stmt)).Limit(1).Rows()
 		if err != nil {
 			return err
 		}

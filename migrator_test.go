@@ -40,6 +40,9 @@ func (*Testtable5) TableName() string { return "testschema2.Testtables" }
 
 func TestAutomigrateTablesWithoutDefaultSchema(t *testing.T) {
 	connectionString := os.Getenv("CONNECTION_STRING")
+	if connectionString == "" {
+		t.Skip("CONNECTION_STRING missing, skipping test")
+	}
 	db, err := gorm.Open(sqlserver.Open(connectionString))
 	if err != nil {
 		t.Error(err)

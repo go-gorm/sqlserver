@@ -52,13 +52,13 @@ func Create(db *gorm.DB) {
 				if field := db.Statement.Schema.PrioritizedPrimaryField; field != nil && field.AutoIncrement {
 					switch db.Statement.ReflectValue.Kind() {
 					case reflect.Struct:
-						_, isZero := field.ValueOf(db.Statement.ReflectValue)
+						_, isZero := field.ValueOf(db.Statement.Context, db.Statement.ReflectValue)
 						setIdentityInsert = !isZero
 					case reflect.Slice, reflect.Array:
 						for i := 0; i < db.Statement.ReflectValue.Len(); i++ {
 							obj := db.Statement.ReflectValue.Index(i)
 							if reflect.Indirect(obj).Kind() == reflect.Struct {
-								_, isZero := field.ValueOf(db.Statement.ReflectValue.Index(i))
+								_, isZero := field.ValueOf(db.Statement.Context, db.Statement.ReflectValue.Index(i))
 								setIdentityInsert = !isZero
 							}
 							break

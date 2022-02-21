@@ -169,6 +169,12 @@ func (dialector Dialector) DataTypeOf(field *schema.Field) string {
 		}
 		return sqlType
 	case schema.Float:
+		if field.Precision > 0 {
+			if field.Scale > 0 {
+				return fmt.Sprintf("decimal(%d, %d)", field.Precision, field.Scale)
+			}
+			return fmt.Sprintf("decimal(%d)", field.Precision)
+		}
 		return "float"
 	case schema.String:
 		size := field.Size
@@ -185,6 +191,9 @@ func (dialector Dialector) DataTypeOf(field *schema.Field) string {
 		}
 		return "nvarchar(MAX)"
 	case schema.Time:
+		if field.Precision > 0 {
+			return fmt.Sprintf("datetimeoffset(%d)", field.Precision)
+		}
 		return "datetimeoffset"
 	case schema.Bytes:
 		return "varbinary(MAX)"

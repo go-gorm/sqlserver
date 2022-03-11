@@ -26,14 +26,20 @@ func getTableSchemaName(schema *schema.Schema) string {
 	if schema == nil || !strings.Contains(schema.Table, ".") {
 		return ""
 	}
-	tables := strings.Split(schema.Table, ".")
-	if len(tables) == 2 { //[table_schema].[table_name]
-		return tables[0]
-	} else if len(tables) == 3 { //[table_catalog].[table_schema].[table_name]
-		return tables[1]
-	}
+	_, schemaName, _ := splitFullQualifiedName(schema.Table)
+	return schemaName
+}
 
-	return ""
+func splitFullQualifiedName(name string) (string, string, string) {
+	nameParts := strings.Split(name, ".")
+	if len(nameParts) == 1 { //[table_name]
+		return "", "", nameParts[0]
+	} else if len(nameParts) == 2 { //[table_schema].[table_name]
+		return "", nameParts[0], nameParts[1]
+	} else if len(nameParts) == 3 { //[table_catalog].[table_schema].[table_name]
+		return nameParts[0], nameParts[1], nameParts[2]
+	}
+	return "", "", ""
 }
 
 func getFullQualifiedTableName(stmt *gorm.Statement) string {
@@ -311,9 +317,17 @@ func (m Migrator) HasConstraint(value interface{}, name string) bool {
 			name = chk.Name
 		}
 
+		tableCatalog, schema, tableName := splitFullQualifiedName(table)
+		if tableCatalog == "" {
+			tableCatalog = m.CurrentDatabase()
+		}
+		if schema == "" {
+			schema = "%"
+		}
+
 		return m.DB.Raw(
-			`SELECT count(*) FROM sys.foreign_keys as F inner join sys.tables as T on F.parent_object_id=T.object_id inner join information_schema.tables as I on I.TABLE_NAME = T.name WHERE F.name = ?  AND T.object_id = OBJECT_ID(?) AND I.TABLE_CATALOG = ?;`,
-			name, table, m.CurrentDatabase(),
+			`SELECT count(*) FROM sys.foreign_keys as F inner join sys.tables as T on F.parent_object_id=T.object_id inner join information_schema.tables as I on I.TABLE_NAME = T.name WHERE F.name = ?  AND I.TABLE_NAME = ? AND I.TABLE_SCHEMA like ? AND I.TABLE_CATALOG = ?;`,
+			name, tableName, schema, tableCatalog,
 		).Row().Scan(&count)
 	})
 	return count > 0

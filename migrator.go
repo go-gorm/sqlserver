@@ -144,7 +144,7 @@ func (m Migrator) RenameColumn(value interface{}, oldName, newName string) error
 	})
 }
 
-var defaultValueTrimRegexp = regexp.MustCompile("^\\('?(.*)'?\\)$")
+var defaultValueTrimRegexp = regexp.MustCompile("^\\('?([^']*)'?\\)$")
 
 // ColumnTypes return columnTypes []gorm.ColumnType and execErr error
 func (m Migrator) ColumnTypes(value interface{}) ([]gorm.ColumnType, error) {

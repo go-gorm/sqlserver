@@ -87,12 +87,12 @@ func (dialector Dialector) ClauseBuilders() map[string]clause.ClauseBuilder {
 					builder.WriteString(" ROWS")
 				}
 
-				if limit.Limit > 0 {
+				if limit.Limit != nil && *limit.Limit >= 0 {
 					if limit.Offset == 0 {
 						builder.WriteString("OFFSET 0 ROW")
 					}
 					builder.WriteString(" FETCH NEXT ")
-					builder.WriteString(strconv.Itoa(limit.Limit))
+					builder.WriteString(strconv.Itoa(*limit.Limit))
 					builder.WriteString(" ROWS ONLY")
 				}
 			}

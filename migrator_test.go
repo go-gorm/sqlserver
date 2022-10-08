@@ -8,6 +8,14 @@ import (
 	"gorm.io/gorm"
 )
 
+var sqlserverDSN = "sqlserver://gorm:LoremIpsum86@localhost:9930?database=gorm"
+
+func init() {
+	if dbDSN := os.Getenv("GORM_DSN"); dbDSN != "" {
+		sqlserverDSN = dbDSN
+	}
+}
+
 type Testtable struct {
 	Test uint64 `gorm:"index"`
 }
@@ -39,11 +47,7 @@ type Testtable5 struct {
 func (*Testtable5) TableName() string { return "testschema2.Testtables" }
 
 func TestAutomigrateTablesWithoutDefaultSchema(t *testing.T) {
-	connectionString := os.Getenv("CONNECTION_STRING")
-	if connectionString == "" {
-		t.Skip("CONNECTION_STRING missing, skipping test")
-	}
-	db, err := gorm.Open(sqlserver.Open(connectionString))
+	db, err := gorm.Open(sqlserver.Open(sqlserverDSN))
 	if err != nil {
 		t.Error(err)
 	}

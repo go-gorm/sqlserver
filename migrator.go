@@ -9,6 +9,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	"gorm.io/gorm/migrator"
+	"gorm.io/gorm/schema"
 )
 
 type Migrator struct {
@@ -19,12 +20,46 @@ func (m Migrator) GetTables() (tableList []string, err error) {
 	return tableList, m.DB.Raw("SELECT table_name FROM INFORMATION_SCHEMA.tables WHERE  table_catalog = ?", m.CurrentDatabase()).Scan(&tableList).Error
 }
 
+func getTableSchemaName(schema *schema.Schema) string {
+	//return the schema name if it is explicitly provided in the table name
+	//otherwise return a sql wildcard -> use any table_schema
+	if schema == nil || !strings.Contains(schema.Table, ".") {
+		return ""
+	}
+	_, schemaName, _ := splitFullQualifiedName(schema.Table)
+	return schemaName
+}
+
+func splitFullQualifiedName(name string) (string, string, string) {
+	nameParts := strings.Split(name, ".")
+	if len(nameParts) == 1 { //[table_name]
+		return "", "", nameParts[0]
+	} else if len(nameParts) == 2 { //[table_schema].[table_name]
+		return "", nameParts[0], nameParts[1]
+	} else if len(nameParts) == 3 { //[table_catalog].[table_schema].[table_name]
+		return nameParts[0], nameParts[1], nameParts[2]
+	}
+	return "", "", ""
+}
+
+func getFullQualifiedTableName(stmt *gorm.Statement) string {
+	fullQualifiedTableName := stmt.Table
+	if schemaName := getTableSchemaName(stmt.Schema); schemaName != "" {
+		fullQualifiedTableName = schemaName + "." + fullQualifiedTableName
+	}
+	return fullQualifiedTableName
+}
+
 func (m Migrator) HasTable(value interface{}) bool {
 	var count int
 	m.RunWithValue(value, func(stmt *gorm.Statement) error {
+		schemaName := getTableSchemaName(stmt.Schema)
+		if schemaName == "" {
+			schemaName = "%"
+		}
 		return m.DB.Raw(
-			"SELECT count(*) FROM INFORMATION_SCHEMA.tables WHERE table_name = ? AND table_catalog = ?",
-			stmt.Table, m.CurrentDatabase(),
+			"SELECT count(*) FROM INFORMATION_SCHEMA.tables WHERE table_name = ? AND table_catalog = ? and table_schema like ?  AND table_type = ?",
+			stmt.Table, m.CurrentDatabase(), schemaName, "BASE TABLE",
 		).Row().Scan(&count)
 	})
 	return count > 0
@@ -40,7 +75,7 @@ func (m Migrator) DropTable(values ...interface{}) error {
 				Parent string
 			}
 			var constraints []constraint
-			err := tx.Raw("SELECT name, OBJECT_NAME(parent_object_id) as parent FROM sys.foreign_keys WHERE referenced_object_id = object_id(?)", stmt.Table).Scan(&constraints).Error
+			err := tx.Raw("SELECT name, OBJECT_NAME(parent_object_id) as parent FROM sys.foreign_keys WHERE referenced_object_id = object_id(?)", getFullQualifiedTableName(stmt)).Scan(&constraints).Error
 
 			for _, c := range constraints {
 				if err == nil {
@@ -150,7 +185,7 @@ var defaultValueTrimRegexp = regexp.MustCompile("^\\('?([^']*)'?\\)$")
 func (m Migrator) ColumnTypes(value interface{}) ([]gorm.ColumnType, error) {
 	columnTypes := make([]gorm.ColumnType, 0)
 	execErr := m.RunWithValue(value, func(stmt *gorm.Statement) (err error) {
-		rows, err := m.DB.Session(&gorm.Session{}).Table(stmt.Table).Limit(1).Rows()
+		rows, err := m.DB.Session(&gorm.Session{}).Table(getFullQualifiedTableName(stmt)).Limit(1).Rows()
 		if err != nil {
 			return err
 		}
@@ -259,7 +294,7 @@ func (m Migrator) HasIndex(value interface{}, name string) bool {
 
 		return m.DB.Raw(
 			"SELECT count(*) FROM sys.indexes WHERE name=? AND object_id=OBJECT_ID(?)",
-			name, stmt.Table,
+			name, getFullQualifiedTableName(stmt),
 		).Row().Scan(&count)
 	})
 	return count > 0
@@ -285,9 +320,17 @@ func (m Migrator) HasConstraint(value interface{}, name string) bool {
 			name = chk.Name
 		}
 
+		tableCatalog, schema, tableName := splitFullQualifiedName(table)
+		if tableCatalog == "" {
+			tableCatalog = m.CurrentDatabase()
+		}
+		if schema == "" {
+			schema = "%"
+		}
+
 		return m.DB.Raw(
-			`SELECT count(*) FROM sys.foreign_keys as F inner join sys.tables as T on F.parent_object_id=T.object_id inner join information_schema.tables as I on I.TABLE_NAME = T.name WHERE F.name = ?  AND T.Name = ? AND I.TABLE_CATALOG = ?;`,
-			name, table, m.CurrentDatabase(),
+			`SELECT count(*) FROM sys.foreign_keys as F inner join sys.tables as T on F.parent_object_id=T.object_id inner join information_schema.tables as I on I.TABLE_NAME = T.name WHERE F.name = ?  AND I.TABLE_NAME = ? AND I.TABLE_SCHEMA like ? AND I.TABLE_CATALOG = ?;`,
+			name, tableName, schema, tableCatalog,
 		).Row().Scan(&count)
 	})
 	return count > 0
@@ -295,5 +338,10 @@ func (m Migrator) HasConstraint(value interface{}, name string) bool {
 
 func (m Migrator) CurrentDatabase() (name string) {
 	m.DB.Raw("SELECT DB_NAME() AS [Current Database]").Row().Scan(&name)
+	return
+}
+
+func (m Migrator) DefaultSchema() (name string) {
+	m.DB.Raw("SELECT SCHEMA_NAME() AS [Default Schema]").Row().Scan(&name)
 	return
 }

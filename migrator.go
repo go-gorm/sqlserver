@@ -17,7 +17,7 @@ type Migrator struct {
 }
 
 func (m Migrator) GetTables() (tableList []string, err error) {
-	return tableList, m.DB.Raw("SELECT table_name FROM INFORMATION_SCHEMA.tables WHERE  table_catalog = ?", m.CurrentDatabase()).Scan(&tableList).Error
+	return tableList, m.DB.Raw("SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE  TABLE_CATALOG = ?", m.CurrentDatabase()).Scan(&tableList).Error
 }
 
 func getTableSchemaName(schema *schema.Schema) string {
@@ -58,7 +58,7 @@ func (m Migrator) HasTable(value interface{}) bool {
 			schemaName = "%"
 		}
 		return m.DB.Raw(
-			"SELECT count(*) FROM INFORMATION_SCHEMA.tables WHERE table_name = ? AND table_catalog = ? and table_schema like ?  AND table_type = ?",
+			"SELECT count(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = ? AND TABLE_CATALOG = ? and TABLE_SCHEMA like ?  AND TABLE_TYPE = ?",
 			stmt.Table, m.CurrentDatabase(), schemaName, "BASE TABLE",
 		).Row().Scan(&count)
 	})
@@ -135,7 +135,7 @@ func (m Migrator) HasColumn(value interface{}, field string) bool {
 		}
 
 		return m.DB.Raw(
-			"SELECT count(*) FROM INFORMATION_SCHEMA.columns WHERE table_catalog = ? AND table_name = ? AND column_name = ?",
+			"SELECT count(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_CATALOG = ? AND TABLE_NAME = ? AND COLUMN_NAME = ?",
 			currentDatabase, stmt.Table, name,
 		).Row().Scan(&count)
 	})
@@ -195,7 +195,7 @@ func (m Migrator) ColumnTypes(value interface{}) ([]gorm.ColumnType, error) {
 
 		{
 			var (
-				columnTypeSQL   = "SELECT column_name, data_type, column_default, is_nullable, character_maximum_length, numeric_precision, numeric_precision_radix, numeric_scale, datetime_precision FROM INFORMATION_SCHEMA.COLUMNS WHERE table_catalog = ? AND table_name = ?"
+				columnTypeSQL   = "SELECT COLUMN_NAME, DATA_TYPE, COLUMN_DEFAULT, IS_NULLABLE, CHARACTER_MAXIMUM_LENGTH, NUMERIC_PRECISION, NUMERIC_PRECISION_RADIX, NUMERIC_SCALE, DATETIME_PRECISION FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_CATALOG = ? AND TABLE_NAME = ?"
 				columns, rowErr = m.DB.Raw(columnTypeSQL, m.CurrentDatabase(), stmt.Table).Rows()
 			)
 
@@ -253,7 +253,7 @@ func (m Migrator) ColumnTypes(value interface{}) ([]gorm.ColumnType, error) {
 		}
 
 		{
-			columnTypeRows, err := m.DB.Raw("SELECT c.column_name, t.constraint_type FROM information_schema.table_constraints t JOIN information_schema.constraint_column_usage c ON c.constraint_name=t.constraint_name WHERE t.constraint_type IN ('PRIMARY KEY', 'UNIQUE') AND c.table_catalog = ? AND c.table_name = ?", m.CurrentDatabase(), stmt.Table).Rows()
+			columnTypeRows, err := m.DB.Raw("SELECT c.COLUMN_NAME, t.CONSTRAINT_TYPE FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS t JOIN INFORMATION_SCHEMA.CONSTRAINT_COLUMN_USAGE c ON c.CONSTRAINT_NAME=t.CONSTRAINT_NAME WHERE t.CONSTRAINT_TYPE IN ('PRIMARY KEY', 'UNIQUE') AND c.TABLE_CATALOG = ? AND c.TABLE_NAME = ?", m.CurrentDatabase(), stmt.Table).Rows()
 			if err != nil {
 				return err
 			}
@@ -329,7 +329,7 @@ func (m Migrator) HasConstraint(value interface{}, name string) bool {
 		}
 
 		return m.DB.Raw(
-			`SELECT count(*) FROM sys.foreign_keys as F inner join sys.tables as T on F.parent_object_id=T.object_id inner join information_schema.tables as I on I.TABLE_NAME = T.name WHERE F.name = ?  AND I.TABLE_NAME = ? AND I.TABLE_SCHEMA like ? AND I.TABLE_CATALOG = ?;`,
+			`SELECT count(*) FROM sys.foreign_keys as F inner join sys.tables as T on F.parent_object_id=T.object_id inner join INFORMATION_SCHEMA.TABLES as I on I.TABLE_NAME = T.name WHERE F.name = ?  AND I.TABLE_NAME = ? AND I.TABLE_SCHEMA like ? AND I.TABLE_CATALOG = ?;`,
 			name, tableName, schema, tableCatalog,
 		).Row().Scan(&count)
 	})

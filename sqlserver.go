@@ -155,13 +155,23 @@ func (dialector Dialector) DataTypeOf(field *schema.Field) string {
 		return "bit"
 	case schema.Int, schema.Uint:
 		var sqlType string
-		switch {
-		case field.Size < 16:
-			sqlType = "smallint"
-		case field.Size < 31:
+		// The following if prevents the "int" type to be overridden when specified in the type tag
+		// Example:
+		// type Test struct {
+		//     Field int `gorm:"type:int"`
+		// }
+		// The Field will be created as the "int" type instead of "bigint"
+		if val, ok := field.TagSettings["TYPE"]; ok && val == "int" {
 			sqlType = "int"
-		default:
-			sqlType = "bigint"
+		} else {
+			switch {
+			case field.Size < 16:
+				sqlType = "smallint"
+			case field.Size < 31:
+				sqlType = "int"
+			default:
+				sqlType = "bigint"
+			}
 		}
 
 		if field.AutoIncrement {

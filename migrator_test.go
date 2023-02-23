@@ -96,3 +96,22 @@ func TestAutomigrateTablesWithoutDefaultSchema(t *testing.T) {
 	}
 
 }
+
+type Testtable6 struct {
+	ID string `gorm:"index:unique_issuer,class:UNIQUE,where:id IS NOT NULL"`
+}
+
+func (*Testtable6) TableName() string { return "testtable" }
+
+func TestCreateIndex(t *testing.T) {
+	db, err := gorm.Open(sqlserver.Open(sqlserverDSN))
+	if err != nil {
+		t.Error(err)
+	}
+	if err = db.AutoMigrate(&Testtable6{}); err != nil {
+		t.Error("couldn't create table at user default schema", err)
+	}
+	if tx := db.Exec("drop table testtable"); tx.Error != nil {
+		t.Error("couldn't drop table testtable", tx.Error)
+	}
+}

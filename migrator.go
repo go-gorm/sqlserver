@@ -309,7 +309,7 @@ func (m Migrator) CreateIndex(value interface{}, name string) error {
 			createIndexSQL += " " + idx.Option
 		}
 
-		return m.DB.Debug().Exec(createIndexSQL, values...).Error
+		return m.DB.Exec(createIndexSQL, values...).Error
 	})
 }
 

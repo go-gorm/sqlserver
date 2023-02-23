@@ -98,7 +98,7 @@ func TestAutomigrateTablesWithoutDefaultSchema(t *testing.T) {
 }
 
 type Testtable6 struct {
-	ID string `gorm:"index:unique_issuer,class:UNIQUE,where:id IS NOT NULL"`
+	ID string `gorm:"index:unique_id,class:UNIQUE,where:id IS NOT NULL"`
 }
 
 func (*Testtable6) TableName() string { return "testtable" }

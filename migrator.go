@@ -285,6 +285,34 @@ func (m Migrator) ColumnTypes(value interface{}) ([]gorm.ColumnType, error) {
 	return columnTypes, execErr
 }
 
+func (m Migrator) CreateIndex(value interface{}, name string) error {
+	return m.RunWithValue(value, func(stmt *gorm.Statement) error {
+		idx := stmt.Schema.LookIndex(name)
+		if idx == nil {
+			return fmt.Errorf("failed to create index with name %s", name)
+		}
+
+		opts := m.BuildIndexOptions(idx.Fields, stmt)
+		values := []interface{}{clause.Column{Name: idx.Name}, m.CurrentTable(stmt), opts}
+
+		createIndexSQL := "CREATE "
+		if idx.Class != "" {
+			createIndexSQL += idx.Class + " "
+		}
+		createIndexSQL += "INDEX ? ON ??"
+
+		if idx.Where != "" {
+			createIndexSQL += " WHERE " + idx.Where
+		}
+
+		if idx.Option != "" {
+			createIndexSQL += " " + idx.Option
+		}
+
+		return m.DB.Exec(createIndexSQL, values...).Error
+	})
+}
+
 func (m Migrator) HasIndex(value interface{}, name string) bool {
 	var count int
 	m.RunWithValue(value, func(stmt *gorm.Statement) error {

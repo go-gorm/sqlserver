@@ -21,8 +21,8 @@ func (m Migrator) GetTables() (tableList []string, err error) {
 }
 
 func getTableSchemaName(schema *schema.Schema) string {
-	//return the schema name if it is explicitly provided in the table name
-	//otherwise return a sql wildcard -> use any table_schema
+	// return the schema name if it is explicitly provided in the table name
+	// otherwise return a sql wildcard -> use any table_schema
 	if schema == nil || !strings.Contains(schema.Table, ".") {
 		return ""
 	}
@@ -32,11 +32,11 @@ func getTableSchemaName(schema *schema.Schema) string {
 
 func splitFullQualifiedName(name string) (string, string, string) {
 	nameParts := strings.Split(name, ".")
-	if len(nameParts) == 1 { //[table_name]
+	if len(nameParts) == 1 { // [table_name]
 		return "", "", nameParts[0]
-	} else if len(nameParts) == 2 { //[table_schema].[table_name]
+	} else if len(nameParts) == 2 { // [table_schema].[table_name]
 		return "", nameParts[0], nameParts[1]
-	} else if len(nameParts) == 3 { //[table_catalog].[table_schema].[table_name]
+	} else if len(nameParts) == 3 { // [table_catalog].[table_schema].[table_name]
 		return nameParts[0], nameParts[1], nameParts[2]
 	}
 	return "", "", ""
@@ -130,8 +130,10 @@ func (m Migrator) HasColumn(value interface{}, field string) bool {
 	m.RunWithValue(value, func(stmt *gorm.Statement) error {
 		currentDatabase := m.DB.Migrator().CurrentDatabase()
 		name := field
-		if field := stmt.Schema.LookUpField(field); field != nil {
-			name = field.DBName
+		if stmt.Schema != nil {
+			if field := stmt.Schema.LookUpField(field); field != nil {
+				name = field.DBName
+			}
 		}
 
 		return m.DB.Raw(
@@ -145,18 +147,20 @@ func (m Migrator) HasColumn(value interface{}, field string) bool {
 
 func (m Migrator) AlterColumn(value interface{}, field string) error {
 	return m.RunWithValue(value, func(stmt *gorm.Statement) error {
-		if field := stmt.Schema.LookUpField(field); field != nil {
-			fieldType := clause.Expr{SQL: m.DataTypeOf(field)}
-			if field.NotNull {
-				fieldType.SQL += " NOT NULL"
-			} else {
-				fieldType.SQL += " NULL"
-			}
+		if stmt.Schema != nil {
+			if field := stmt.Schema.LookUpField(field); field != nil {
+				fieldType := clause.Expr{SQL: m.DataTypeOf(field)}
+				if field.NotNull {
+					fieldType.SQL += " NOT NULL"
+				} else {
+					fieldType.SQL += " NULL"
+				}
 
-			return m.DB.Exec(
-				"ALTER TABLE ? ALTER COLUMN ? ?",
-				clause.Table{Name: stmt.Table}, clause.Column{Name: field.DBName}, fieldType,
-			).Error
+				return m.DB.Exec(
+					"ALTER TABLE ? ALTER COLUMN ? ?",
+					clause.Table{Name: stmt.Table}, clause.Column{Name: field.DBName}, fieldType,
+				).Error
+			}
 		}
 		return fmt.Errorf("failed to look up field with name: %s", field)
 	})
@@ -164,12 +168,13 @@ func (m Migrator) AlterColumn(value interface{}, field string) error {
 
 func (m Migrator) RenameColumn(value interface{}, oldName, newName string) error {
 	return m.RunWithValue(value, func(stmt *gorm.Statement) error {
-		if field := stmt.Schema.LookUpField(oldName); field != nil {
-			oldName = field.DBName
-		}
-
-		if field := stmt.Schema.LookUpField(newName); field != nil {
-			newName = field.DBName
+		if stmt.Schema != nil {
+			if field := stmt.Schema.LookUpField(oldName); field != nil {
+				oldName = field.DBName
+			}
+			if field := stmt.Schema.LookUpField(newName); field != nil {
+				newName = field.DBName
+			}
 		}
 
 		return m.DB.Exec(
@@ -287,7 +292,10 @@ func (m Migrator) ColumnTypes(value interface{}) ([]gorm.ColumnType, error) {
 
 func (m Migrator) CreateIndex(value interface{}, name string) error {
 	return m.RunWithValue(value, func(stmt *gorm.Statement) error {
-		idx := stmt.Schema.LookIndex(name)
+		var idx *schema.Index
+		if stmt.Schema != nil {
+			idx = stmt.Schema.LookIndex(name)
+		}
 		if idx == nil {
 			return fmt.Errorf("failed to create index with name %s", name)
 		}
@@ -316,8 +324,10 @@ func (m Migrator) CreateIndex(value interface{}, name string) error {
 func (m Migrator) HasIndex(value interface{}, name string) bool {
 	var count int
 	m.RunWithValue(value, func(stmt *gorm.Statement) error {
-		if idx := stmt.Schema.LookIndex(name); idx != nil {
-			name = idx.Name
+		if stmt.Schema != nil {
+			if idx := stmt.Schema.LookIndex(name); idx != nil {
+				name = idx.Name
+			}
 		}
 
 		return m.DB.Raw(

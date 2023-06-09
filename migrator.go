@@ -158,7 +158,7 @@ func (m Migrator) AlterColumn(value interface{}, field string) error {
 
 				return m.DB.Exec(
 					"ALTER TABLE ? ALTER COLUMN ? ?",
-					clause.Table{Name: stmt.Table}, clause.Column{Name: field.DBName}, fieldType,
+					clause.Table{Name: getFullQualifiedTableName(stmt)}, clause.Column{Name: field.DBName}, fieldType,
 				).Error
 			}
 		}

@@ -12,6 +12,22 @@ import (
 	"gorm.io/gorm/schema"
 )
 
+const indexSQL = `
+SELECT 
+	i.name AS index_name,
+	i.is_unique,
+	i.is_primary_key,
+	col.name AS column_name
+FROM
+	sys.indexes i
+	LEFT JOIN sys.index_columns ic ON ic.object_id = i.object_id AND ic.index_id = i.index_id
+	LEFT JOIN sys.all_columns col ON col.column_id = ic.column_id AND col.object_id = ic.object_id
+WHERE 
+	i.name IS NOT NULL
+	AND i.is_unique_constraint = 0
+	AND i.object_id = OBJECT_ID(?)
+`
+
 type Migrator struct {
 	migrator.Migrator
 }
@@ -348,14 +364,50 @@ func (m Migrator) RenameIndex(value interface{}, oldName, newName string) error 
 	})
 }
 
+type Index struct {
+	TableName    string
+	ColumnName   string
+	IndexName    string
+	IsUnique     sql.NullBool
+	IsPrimaryKey sql.NullBool
+}
+
+func (m Migrator) GetIndexes(value interface{}) ([]gorm.Index, error) {
+	indexes := make([]gorm.Index, 0)
+	err := m.RunWithValue(value, func(stmt *gorm.Statement) error {
+		result := make([]*Index, 0)
+		if err := m.DB.Raw(indexSQL, stmt.Table).Scan(&result).Error; err != nil {
+			return err
+		}
+		indexMap := make(map[string]*migrator.Index)
+		for _, r := range result {
+			idx, ok := indexMap[r.IndexName]
+			if !ok {
+				idx = &migrator.Index{
+					TableName:       stmt.Table,
+					NameValue:       r.IndexName,
+					ColumnList:      nil,
+					PrimaryKeyValue: r.IsPrimaryKey,
+					UniqueValue:     r.IsUnique,
+				}
+			}
+			idx.ColumnList = append(idx.ColumnList, r.ColumnName)
+			indexMap[r.IndexName] = idx
+		}
+		for _, idx := range indexMap {
+			indexes = append(indexes, idx)
+		}
+		return nil
+	})
+	return indexes, err
+}
+
 func (m Migrator) HasConstraint(value interface{}, name string) bool {
 	var count int64
 	m.RunWithValue(value, func(stmt *gorm.Statement) error {
-		constraint, chk, table := m.GuessConstraintAndTable(stmt, name)
+		constraint, table := m.GuessConstraintInterfaceAndTable(stmt, name)
 		if constraint != nil {
-			name = constraint.Name
-		} else if chk != nil {
-			name = chk.Name
+			name = constraint.GetName()
 		}
 
 		tableCatalog, schema, tableName := splitFullQualifiedName(table)

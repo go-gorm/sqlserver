@@ -42,7 +42,12 @@ func New(config Config) gorm.Dialector {
 func (dialector Dialector) Initialize(db *gorm.DB) (err error) {
 
 	// register callbacks
-	callbacks.RegisterDefaultCallbacks(db, &callbacks.Config{})
+	callbacks.RegisterDefaultCallbacks(db, &callbacks.Config{
+		CreateClauses: []string{"INSERT", "VALUES", "ON CONFLICT"},
+		QueryClauses:  []string{"SELECT", "FROM", "WHERE", "GROUP BY", "ORDER BY", "LIMIT", "FOR"},
+		UpdateClauses: []string{"UPDATE", "SET", "FROM", "WHERE"},
+		DeleteClauses: []string{"DELETE", "FROM", "WHERE"},
+	})
 	db.Callback().Create().Replace("gorm:create", Create)
 	db.Callback().Update().Replace("gorm:update", Update)
 

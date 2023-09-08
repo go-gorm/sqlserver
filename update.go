@@ -5,7 +5,9 @@ import (
 	"gorm.io/gorm/callbacks"
 )
 
-var updateFunc = callbacks.Update(&callbacks.Config{})
+var updateFunc = callbacks.Update(&callbacks.Config{
+	UpdateClauses: []string{"UPDATE", "SET", "RETURNING", "FROM", "WHERE"},
+})
 
 func Update(db *gorm.DB) {
 	if db.Statement.Schema != nil && db.Statement.Schema.PrioritizedPrimaryField != nil && db.Statement.Schema.PrioritizedPrimaryField.AutoIncrement {

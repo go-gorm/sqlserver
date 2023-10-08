@@ -40,9 +40,13 @@ func New(config Config) gorm.Dialector {
 }
 
 func (dialector Dialector) Initialize(db *gorm.DB) (err error) {
-
 	// register callbacks
-	callbacks.RegisterDefaultCallbacks(db, &callbacks.Config{})
+	callbacks.RegisterDefaultCallbacks(db, &callbacks.Config{
+		CreateClauses: []string{"INSERT", "VALUES", "ON CONFLICT"},
+		QueryClauses:  []string{"SELECT", "FROM", "WHERE", "GROUP BY", "ORDER BY", "LIMIT", "FOR"},
+		UpdateClauses: []string{"UPDATE", "SET", "RETURNING", "FROM", "WHERE"},
+		DeleteClauses: []string{"DELETE", "FROM", "RETURNING", "WHERE"},
+	})
 	db.Callback().Create().Replace("gorm:create", Create)
 	db.Callback().Update().Replace("gorm:update", Update)
 
@@ -94,6 +98,34 @@ func (dialector Dialector) ClauseBuilders() map[string]clause.ClauseBuilder {
 					builder.WriteString(" FETCH NEXT ")
 					builder.WriteString(strconv.Itoa(*limit.Limit))
 					builder.WriteString(" ROWS ONLY")
+				}
+			}
+		},
+		"RETURNING": func(c clause.Clause, builder clause.Builder) {
+			if returning, ok := c.Expression.(clause.Returning); ok {
+				if stmt, ok := builder.(*gorm.Statement); ok {
+					var outputTable string
+					if _, ok := stmt.Clauses["UPDATE"]; ok {
+						outputTable = "INSERTED"
+					} else if _, ok := stmt.Clauses["DELETE"]; ok {
+						outputTable = "DELETED"
+					}
+
+					if outputTable != "" {
+						stmt.WriteString("OUTPUT ")
+
+						if len(returning.Columns) > 0 {
+							columns := []clause.Column{}
+							for _, column := range returning.Columns {
+								column.Table = outputTable
+								columns = append(columns, column)
+							}
+							returning.Columns = columns
+							returning.Build(stmt)
+						} else {
+							stmt.WriteString(outputTable + ".*")
+						}
+					}
 				}
 			}
 		},

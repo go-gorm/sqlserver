@@ -115,7 +115,7 @@ func (dialector Dialector) ClauseBuilders() map[string]clause.ClauseBuilder {
 						stmt.WriteString("OUTPUT ")
 
 						if len(returning.Columns) > 0 {
-							columns := []clause.Column{}
+							var columns []clause.Column
 							for _, column := range returning.Columns {
 								column.Table = outputTable
 								columns = append(columns, column)
@@ -187,13 +187,24 @@ func (dialector Dialector) DataTypeOf(field *schema.Field) string {
 		return "bit"
 	case schema.Int, schema.Uint:
 		var sqlType string
-		switch {
-		case field.Size < 16:
-			sqlType = "smallint"
-		case field.Size < 31:
-			sqlType = "int"
-		default:
-			sqlType = "bigint"
+		if field.DataType == schema.Int {
+			switch {
+			case field.Size <= 16:
+				sqlType = "smallint"
+			case field.Size <= 32:
+				sqlType = "int"
+			default:
+				sqlType = "bigint"
+			}
+		} else {
+			switch {
+			case field.Size <= 8:
+				sqlType = "tinyint"
+			case field.Size <= 16:
+				sqlType = "int"
+			default:
+				sqlType = "bigint"
+			}
 		}
 
 		if field.AutoIncrement {
@@ -234,12 +245,12 @@ func (dialector Dialector) DataTypeOf(field *schema.Field) string {
 	return string(field.DataType)
 }
 
-func (dialectopr Dialector) SavePoint(tx *gorm.DB, name string) error {
+func (Dialector) SavePoint(tx *gorm.DB, name string) error {
 	tx.Exec("SAVE TRANSACTION " + name)
 	return nil
 }
 
-func (dialectopr Dialector) RollbackTo(tx *gorm.DB, name string) error {
+func (Dialector) RollbackTo(tx *gorm.DB, name string) error {
 	tx.Exec("ROLLBACK TRANSACTION " + name)
 	return nil
 }

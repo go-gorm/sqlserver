@@ -256,8 +256,6 @@ func (m Migrator) ColumnTypes(value interface{}) ([]gorm.ColumnType, error) {
 						column.DefaultValueValue.String = matches[1]
 						matches = defaultValueTrimRegexp.FindStringSubmatch(column.DefaultValueValue.String)
 					}
-				} else {
-					column.DefaultValueValue.Valid = true
 				}
 
 				for _, c := range rawColumnTypes {

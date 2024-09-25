@@ -11,33 +11,50 @@ jobs:
   run-tests:
     strategy:
       matrix:
-        go: ['1.21', '1.20', '1.19']
-        platform: [ubuntu-latest]
+        go: [ '1.21', '1.20', '1.19' ]
+        platform: [ ubuntu-latest ]
     runs-on: ubuntu-latest
+
+    env:
+      MSSQL_DB: gorm
+      MSSQL_USER: gorm
+      MSSQL_PASSWORD: LoremIpsum86
+
     services:
       mssql:
-        image: mcmoe/mssqldocker:latest
+        image: mcr.microsoft.com/mssql/server:2022-latest
         env:
           ACCEPT_EULA: Y
-          SA_PASSWORD: LoremIpsum86
-          MSSQL_DB: gorm
-          MSSQL_USER: gorm
-          MSSQL_PASSWORD: LoremIpsum86
+          MSSQL_SA_PASSWORD: ${{ env.MSSQL_PASSWORD }}
+          MSSQL_PID: Developer
         ports:
           - 9930:1433
+        options: >-
+          --health-cmd="/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P ${MSSQL_SA_PASSWORD} -N -C -l 30 -Q \"SELECT 1\" || exit 1"
+          --health-start-period 10s
+          --health-interval 5s
+          --health-timeout 10s
+          --health-retries 10
 
     steps:
-    - name: Set up Go 1.x
-      uses: actions/setup-go@v4
-      with:
-        go-version: ${{ matrix.go }}
+      - name: Set up Go 1.x
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+          cache: false
 
-    - name: Check out code into the Go module directory
-      uses: actions/checkout@v4
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v4
 
-      # Run build of the application
-    - name: Run build
-      run: go build .
+      - name: Create gorm database and user in SQL Server
+        run: |
+          docker exec $(docker ps --filter "name=sqlserver" --format "{{.Names}}") \
+          /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P ${MSSQL_PASSWORD} -N -C -l 30 \
+          -Q "CREATE DATABASE ${MSSQL_DB}; CREATE LOGIN ${MSSQL_USER} WITH PASSWORD='${MSSQL_PASSWORD}'; CREATE USER ${MSSQL_USER} FOR LOGIN ${MSSQL_USER}; ALTER SERVER ROLE sysadmin ADD MEMBER [${MSSQL_USER}];"
 
-    - name: Run tests
-      run: go test -race -count=1 -v ./...
+        # Run build of the application
+      - name: Run build
+        run: go build .
+
+      - name: Run tests
+        run: go test -race -count=1 -v ./...

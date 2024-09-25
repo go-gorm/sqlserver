@@ -25,6 +25,12 @@ jobs:
           MSSQL_PASSWORD: LoremIpsum86
         ports:
           - 9930:1433
+        options: >-
+          --health-cmd="/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P LoremIpsum86 -l 30 -Q \"SELECT 1\" || exit 1"
+          --health-start-period 10s
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
 
     steps:
     - name: Set up Go 1.x

@@ -8,6 +8,7 @@ import (
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
+	"gorm.io/gorm/logger"
 	"gorm.io/gorm/migrator"
 	"gorm.io/gorm/schema"
 )
@@ -273,9 +274,8 @@ func (m Migrator) RenameColumn(value interface{}, oldName, newName string) error
 }
 
 func (m Migrator) GetColumnComment(stmt *gorm.Statement, fieldDBName string) (description string) {
-	queryTx := m.DB
+	queryTx := m.DB.Session(&gorm.Session{Logger: m.DB.Logger.LogMode(logger.Warn)})
 	if m.DB.DryRun {
-		queryTx = m.DB.Session(&gorm.Session{})
 		queryTx.DryRun = false
 	}
 	var comment sql.NullString

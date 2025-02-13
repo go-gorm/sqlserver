@@ -27,23 +27,6 @@ func Create(db *gorm.DB) {
 		)
 
 		if hasConflict {
-			if len(db.Statement.Schema.PrimaryFields) > 0 {
-				columnsMap := map[string]bool{}
-				for _, column := range values.Columns {
-					columnsMap[column.Name] = true
-				}
-
-				for _, field := range db.Statement.Schema.PrimaryFields {
-					if _, ok := columnsMap[field.DBName]; !ok {
-						hasConflict = false
-					}
-				}
-			} else {
-				hasConflict = false
-			}
-		}
-
-		if hasConflict {
 			MergeCreate(db, onConflict, values)
 		} else {
 			setIdentityInsert := false
@@ -157,10 +140,10 @@ func MergeCreate(db *gorm.DB, onConflict clause.OnConflict, values clause.Values
 	db.Statement.WriteString(") ON ")
 
 	var where clause.Where
-	for _, field := range db.Statement.Schema.PrimaryFields {
+	for _, field := range onConflict.Columns {
 		where.Exprs = append(where.Exprs, clause.Eq{
-			Column: clause.Column{Table: db.Statement.Table, Name: field.DBName},
-			Value:  clause.Column{Table: "excluded", Name: field.DBName},
+			Column: clause.Column{Table: db.Statement.Table, Name: field.Name},
+			Value:  clause.Column{Table: "excluded", Name: field.Name},
 		})
 	}
 	where.Build(db.Statement)

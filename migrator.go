@@ -325,8 +325,8 @@ func (m Migrator) ColumnTypes(value interface{}) ([]gorm.ColumnType, error) {
 			query := strings.TrimSpace(`
 SELECT COLUMN_NAME, DATA_TYPE, COLUMN_DEFAULT, c.IS_NULLABLE, CHARACTER_MAXIMUM_LENGTH, NUMERIC_PRECISION, NUMERIC_PRECISION_RADIX, NUMERIC_SCALE, DATETIME_PRECISION, AUTO_INCREMENT = c2.is_identity
 FROM INFORMATION_SCHEMA.COLUMNS c
-INNER JOIN sys.tables t ON c.TABLE_NAME = t.[name]
-INNER JOIN sys.columns c2 ON t.object_id = c2.object_id AND c2.[name] = c.COLUMN_NAME
+LEFT JOIN sys.tables t ON c.TABLE_NAME = t.[name]
+LEFT JOIN sys.columns c2 ON t.object_id = c2.object_id AND c2.[name] = c.COLUMN_NAME
 WHERE TABLE_CATALOG = ? AND TABLE_NAME = ?`)
 
 			queryParameters := []interface{}{m.CurrentDatabase(), tableName}

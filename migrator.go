@@ -372,7 +372,7 @@ WHERE TABLE_CATALOG = ? AND TABLE_NAME = ?`)
 					column.DecimalSizeValue = datetimePrecision
 				}
 
-				if autoIncrementValue.Valid {
+				if autoIncrementValue.Valid && autoIncrementValue.Bool {
 					column.AutoIncrementValue = autoIncrementValue
 				}
 

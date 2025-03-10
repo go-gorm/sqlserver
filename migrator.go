@@ -322,7 +322,12 @@ func (m Migrator) ColumnTypes(value interface{}) ([]gorm.ColumnType, error) {
 		{
 			_, schemaName, tableName := splitFullQualifiedName(stmt.Table)
 
-			query := "SELECT COLUMN_NAME, DATA_TYPE, COLUMN_DEFAULT, IS_NULLABLE, CHARACTER_MAXIMUM_LENGTH, NUMERIC_PRECISION, NUMERIC_PRECISION_RADIX, NUMERIC_SCALE, DATETIME_PRECISION FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_CATALOG = ? AND TABLE_NAME = ?"
+			query := strings.TrimSpace(`
+SELECT COLUMN_NAME, DATA_TYPE, COLUMN_DEFAULT, c.IS_NULLABLE, CHARACTER_MAXIMUM_LENGTH, NUMERIC_PRECISION, NUMERIC_PRECISION_RADIX, NUMERIC_SCALE, DATETIME_PRECISION, AUTO_INCREMENT = c2.is_identity
+FROM INFORMATION_SCHEMA.COLUMNS c
+LEFT JOIN sys.tables t ON c.TABLE_NAME = t.[name]
+LEFT JOIN sys.columns c2 ON t.object_id = c2.object_id AND c2.[name] = c.COLUMN_NAME
+WHERE TABLE_CATALOG = ? AND TABLE_NAME = ?`)
 
 			queryParameters := []interface{}{m.CurrentDatabase(), tableName}
 
@@ -346,11 +351,12 @@ func (m Migrator) ColumnTypes(value interface{}) ([]gorm.ColumnType, error) {
 						PrimaryKeyValue: sql.NullBool{Valid: true},
 						UniqueValue:     sql.NullBool{Valid: true},
 					}
-					datetimePrecision sql.NullInt64
-					radixValue        sql.NullInt64
-					nullableValue     sql.NullString
-					values            = []interface{}{
-						&column.NameValue, &column.ColumnTypeValue, &column.DefaultValueValue, &nullableValue, &column.LengthValue, &column.DecimalSizeValue, &radixValue, &column.ScaleValue, &datetimePrecision,
+					datetimePrecision  sql.NullInt64
+					radixValue         sql.NullInt64
+					nullableValue      sql.NullString
+					autoIncrementValue sql.NullBool
+					values             = []interface{}{
+						&column.NameValue, &column.ColumnTypeValue, &column.DefaultValueValue, &nullableValue, &column.LengthValue, &column.DecimalSizeValue, &radixValue, &column.ScaleValue, &datetimePrecision, &autoIncrementValue,
 					}
 				)
 
@@ -364,6 +370,10 @@ func (m Migrator) ColumnTypes(value interface{}) ([]gorm.ColumnType, error) {
 
 				if datetimePrecision.Valid {
 					column.DecimalSizeValue = datetimePrecision
+				}
+
+				if autoIncrementValue.Valid && autoIncrementValue.Bool {
+					column.AutoIncrementValue = autoIncrementValue
 				}
 
 				if column.DefaultValueValue.Valid {

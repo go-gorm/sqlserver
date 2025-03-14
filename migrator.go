@@ -15,10 +15,10 @@ import (
 
 const indexSQL = `
 SELECT 
+	col.name AS column_name,
 	i.name AS index_name,
 	i.is_unique,
-	i.is_primary_key,
-	col.name AS column_name
+	i.is_primary_key
 FROM
 	sys.indexes i
 	LEFT JOIN sys.index_columns ic ON ic.object_id = i.object_id AND ic.index_id = i.index_id
@@ -499,11 +499,10 @@ func (m Migrator) RenameIndex(value interface{}, oldName, newName string) error 
 }
 
 type Index struct {
-	TableName    string
-	ColumnName   string
-	IndexName    string
-	IsUnique     sql.NullBool
-	IsPrimaryKey sql.NullBool
+	ColumnName   string       `gorm:"column:column_name"`
+	IndexName    string       `gorm:"column:index_name"`
+	IsUnique     sql.NullBool `gorm:"column:is_unique"`
+	IsPrimaryKey sql.NullBool `gorm:"column:is_primary_key"`
 }
 
 func (m Migrator) GetIndexes(value interface{}) ([]gorm.Index, error) {

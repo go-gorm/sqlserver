@@ -190,7 +190,7 @@ func testGetMigrateColumns(db *gorm.DB, dst interface{}) (columnsWithDefault, co
 }
 
 type TestTableFieldComment struct {
-	ID   string `gorm:"column:id;primaryKey"`
+	ID   string `gorm:"column:id;primaryKey;comment:"` // field comment is an empty string
 	Name string `gorm:"column:name;comment:姓名"`
 	Age  uint   `gorm:"column:age;comment:年龄"`
 }
@@ -198,10 +198,11 @@ type TestTableFieldComment struct {
 func (*TestTableFieldComment) TableName() string { return "test_table_field_comment" }
 
 type TestTableFieldCommentUpdate struct {
-	ID       string     `gorm:"column:id;primaryKey"`
+	ID       string     `gorm:"column:id;primaryKey;comment:ID"`
 	Name     string     `gorm:"column:name;comment:姓名"`
 	Age      uint       `gorm:"column:age;comment:周岁"`
 	Birthday *time.Time `gorm:"column:birthday;comment:生日"`
+	Quote    string     `gorm:"column:quote;comment:注释中包含'单引号'和特殊符号❤️"`
 }
 
 func (*TestTableFieldCommentUpdate) TableName() string { return "test_table_field_comment" }
@@ -209,37 +210,37 @@ func (*TestTableFieldCommentUpdate) TableName() string { return "test_table_fiel
 func TestMigrator_MigrateColumnComment(t *testing.T) {
 	db, err := gorm.Open(sqlserver.Open(sqlserverDSN))
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
-	migrator := db.Debug().Migrator()
+	dm := db.Debug().Migrator()
 
 	tableModel := new(TestTableFieldComment)
 	defer func() {
-		if err = migrator.DropTable(tableModel); err != nil {
+		if err = dm.DropTable(tableModel); err != nil {
 			t.Errorf("couldn't drop table %q, got error: %v", tableModel.TableName(), err)
 		}
 	}()
 
-	if err = migrator.AutoMigrate(tableModel); err != nil {
+	if err = dm.AutoMigrate(tableModel); err != nil {
 		t.Fatal(err)
 	}
 	tableModelUpdate := new(TestTableFieldCommentUpdate)
-	if err = migrator.AutoMigrate(tableModelUpdate); err != nil {
+	if err = dm.AutoMigrate(tableModelUpdate); err != nil {
 		t.Error(err)
 	}
 
-	if m, ok := migrator.(sqlserver.Migrator); ok {
+	if m, ok := dm.(sqlserver.Migrator); ok {
 		stmt := db.Model(tableModelUpdate).Find(nil).Statement
 		if stmt == nil || stmt.Schema == nil {
 			t.Fatal("expected Statement.Schema, got nil")
 		}
 
-		wantComments := []string{"", "姓名", "周岁", "生日"}
+		wantComments := []string{"ID", "姓名", "周岁", "生日", "注释中包含'单引号'和特殊符号❤️"}
 		gotComments := make([]string, len(stmt.Schema.DBNames))
 
 		for i, fieldDBName := range stmt.Schema.DBNames {
 			comment := m.GetColumnComment(stmt, fieldDBName)
-			gotComments[i] = comment
+			gotComments[i] = comment.String
 		}
 
 		if !reflect.DeepEqual(wantComments, gotComments) {

@@ -9,6 +9,7 @@ import (
 // The error codes to map mssql errors to gorm errors, here is a reference about error codes for mssql https://learn.microsoft.com/en-us/sql/relational-databases/errors-events/database-engine-events-and-errors?view=sql-server-ver16
 var errCodes = map[int32]error{
 	2627: gorm.ErrDuplicatedKey,
+	2601: gorm.ErrDuplicatedKey,
 	547:  gorm.ErrForeignKeyViolated,
 }
 

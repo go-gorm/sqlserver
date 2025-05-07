@@ -28,6 +28,11 @@ func TestDialector_Translate(t *testing.T) {
 			want: gorm.ErrDuplicatedKey,
 		},
 		{
+			name: "it should return ErrDuplicatedKey error if the error number is 2601",
+			args: args{err: mssql.Error{Number: 2601}},
+			want: gorm.ErrDuplicatedKey,
+		},
+		{
 			name: "it should return ErrForeignKeyViolated the error number is 547",
 			args: args{err: mssql.Error{Number: 547}},
 			want: gorm.ErrForeignKeyViolated,

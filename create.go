@@ -123,11 +123,18 @@ func Create(db *gorm.DB) {
 			if db.AddError(err) == nil {
 				defer rows.Close()
 				gorm.Scan(rows, db, gorm.ScanUpdate|gorm.ScanOnConflictDoNothing)
+				if db.Statement.Result != nil {
+					db.Statement.Result.RowsAffected = db.RowsAffected
+				}
 			}
 		} else {
 			result, err := db.Statement.ConnPool.ExecContext(db.Statement.Context, db.Statement.SQL.String(), db.Statement.Vars...)
 			if db.AddError(err) == nil {
 				db.RowsAffected, _ = result.RowsAffected()
+				if db.Statement.Result != nil {
+					db.Statement.Result.Result = result
+					db.Statement.Result.RowsAffected = db.RowsAffected
+				}
 			}
 		}
 	}

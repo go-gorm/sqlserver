@@ -279,7 +279,7 @@ func (m Migrator) GetColumnComment(stmt *gorm.Statement, fieldDBName string) (co
 	if m.DB.DryRun {
 		queryTx.DryRun = false
 	}
-	queryTx.Raw("SELECT value FROM ?.sys.fn_listextendedproperty('MS_Description', 'SCHEMA', ?, 'TABLE', ?, 'COLUMN', ?)",
+	queryTx.Raw("SELECT value FROM [?].sys.fn_listextendedproperty('MS_Description', 'SCHEMA', ?, 'TABLE', ?, 'COLUMN', ?)",
 		gorm.Expr(m.CurrentDatabase()), m.getTableSchemaName(stmt.Schema), stmt.Table, fieldDBName).Scan(&comment)
 	return
 }

@@ -19,6 +19,7 @@ func Create(db *gorm.DB) {
 		}
 	}
 
+	hasOutput := false
 	if db.Statement.SQL.String() == "" {
 		var (
 			values                  = callbacks.ConvertToCreateValues(db.Statement)
@@ -44,7 +45,7 @@ func Create(db *gorm.DB) {
 		}
 
 		if hasConflict {
-			MergeCreate(db, onConflict, values)
+			hasOutput = MergeCreate(db, onConflict, values)
 		} else {
 			setIdentityInsert := false
 
@@ -89,7 +90,7 @@ func Create(db *gorm.DB) {
 					}
 					db.Statement.WriteByte(')')
 
-					outputInserted(db)
+					hasOutput = outputInserted(db)
 
 					db.Statement.WriteString(" VALUES ")
 
@@ -118,7 +119,7 @@ func Create(db *gorm.DB) {
 	}
 
 	if !db.DryRun && db.Error == nil {
-		if db.Statement.Schema != nil && len(db.Statement.Schema.FieldsWithDefaultDBValue) > 0 {
+		if db.Statement.Schema != nil && hasOutput {
 			rows, err := db.Statement.ConnPool.QueryContext(db.Statement.Context, db.Statement.SQL.String(), db.Statement.Vars...)
 			if db.AddError(err) == nil {
 				defer rows.Close()
@@ -140,7 +141,7 @@ func Create(db *gorm.DB) {
 	}
 }
 
-func MergeCreate(db *gorm.DB, onConflict clause.OnConflict, values clause.Values) {
+func MergeCreate(db *gorm.DB, onConflict clause.OnConflict, values clause.Values) bool {
 	db.Statement.WriteString("MERGE INTO ")
 	db.Statement.WriteQuoted(db.Statement.Table)
 	db.Statement.WriteString(" USING (VALUES")
@@ -207,19 +208,27 @@ func MergeCreate(db *gorm.DB, onConflict clause.OnConflict, values clause.Values
 	}
 
 	db.Statement.WriteString(")")
-	outputInserted(db)
+	hasOutput := outputInserted(db)
 	db.Statement.WriteString(";")
+	return hasOutput
 }
 
-func outputInserted(db *gorm.DB) {
+func outputInserted(db *gorm.DB) (hasOutput bool) {
 	if db.Statement.Schema != nil && len(db.Statement.Schema.FieldsWithDefaultDBValue) > 0 {
-		db.Statement.WriteString(" OUTPUT")
-		for idx, field := range db.Statement.Schema.FieldsWithDefaultDBValue {
-			if idx > 0 {
+		for _, field := range db.Statement.Schema.FieldsWithDefaultDBValue {
+			if hasOutput {
 				db.Statement.WriteString(",")
 			}
-			db.Statement.WriteString(" INSERTED.")
-			db.Statement.AddVar(db.Statement, clause.Column{Name: field.DBName})
+			if field.Readable {
+				if !hasOutput {
+					db.Statement.WriteString(" OUTPUT INSERTED.")
+					hasOutput = true
+				} else {
+					db.Statement.WriteString(" INSERTED.")
+				}
+				db.Statement.AddVar(db.Statement, clause.Column{Name: field.DBName})
+			}
 		}
 	}
+	return hasOutput
 }

@@ -437,6 +437,29 @@ WHERE TABLE_CATALOG = ? AND TABLE_NAME = ?`)
 	return columnTypes, execErr
 }
 
+func (m Migrator) CreateView(name string, option gorm.ViewOption) error {
+	if option.Query == nil {
+		return gorm.ErrSubQueryRequired
+	}
+
+	sql := new(strings.Builder)
+	sql.WriteString("CREATE ")
+	if option.Replace {
+		sql.WriteString("OR ALTER ")
+	}
+	sql.WriteString("VIEW ")
+	m.QuoteTo(sql, name)
+	sql.WriteString(" AS ")
+
+	m.DB.Statement.AddVar(sql, option.Query)
+
+	if option.CheckOption != "" {
+		sql.WriteString(" ")
+		sql.WriteString(option.CheckOption)
+	}
+	return m.DB.Exec(m.Explain(sql.String(), m.DB.Statement.Vars...)).Error
+}
+
 func (m Migrator) CreateIndex(value interface{}, name string) error {
 	return m.RunWithValue(value, func(stmt *gorm.Statement) error {
 		var idx *schema.Index

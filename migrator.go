@@ -573,17 +573,29 @@ func (m Migrator) HasConstraint(value interface{}, name string) bool {
 
 		return m.DB.Raw(
 			`SELECT count(*) FROM (
+				-- Check CHECK constraint
 				SELECT C.name, T.name as table_name FROM sys.check_constraints as C 
 				INNER JOIN sys.tables as T on C.parent_object_id=T.object_id 
 				INNER JOIN INFORMATION_SCHEMA.TABLES as I on I.TABLE_NAME = T.name 
 				WHERE C.name = ? AND I.TABLE_NAME = ? AND I.TABLE_SCHEMA like ? AND I.TABLE_CATALOG = ?
 				UNION
+				-- Check foreign key constraints
 				SELECT FK.name, T.name as table_name FROM sys.foreign_keys as FK 
 				INNER JOIN sys.tables as T on FK.parent_object_id=T.object_id 
 				INNER JOIN INFORMATION_SCHEMA.TABLES as I on I.TABLE_NAME = T.name 
 				WHERE FK.name = ? AND I.TABLE_NAME = ? AND I.TABLE_SCHEMA like ? AND I.TABLE_CATALOG = ?
+				UNION
+				-- Check Unique Constraint
+				SELECT UK.name, T.name as table_name FROM sys.key_constraints as UK 
+				INNER JOIN sys.tables as T on UK.parent_object_id = T.object_id 
+				INNER JOIN INFORMATION_SCHEMA.TABLES as I on I.TABLE_NAME = T.name 
+				WHERE UK.type = 'UQ' AND UK.name = ? AND I.TABLE_NAME = ? AND I.TABLE_SCHEMA like ? AND I.TABLE_CATALOG = ?
 			) as constraints;`,
+			// CHECK constraint parameter
 			name, tableName, tableSchema, tableCatalog,
+			// Foreign key constraint parameters
+			name, tableName, tableSchema, tableCatalog,
+			// Unique Constraint Parameter
 			name, tableName, tableSchema, tableCatalog,
 		).Row().Scan(&count)
 	})

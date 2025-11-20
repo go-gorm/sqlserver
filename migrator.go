@@ -396,7 +396,8 @@ WHERE TABLE_CATALOG = ? AND TABLE_NAME = ?`)
 
 		{
 			_, schemaName, tableName := splitFullQualifiedName(stmt.Table)
-			query := "SELECT c.COLUMN_NAME, t.CONSTRAINT_TYPE FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS t JOIN INFORMATION_SCHEMA.CONSTRAINT_COLUMN_USAGE c ON c.CONSTRAINT_NAME=t.CONSTRAINT_NAME WHERE t.CONSTRAINT_TYPE IN ('PRIMARY KEY', 'UNIQUE') AND c.TABLE_CATALOG = ? AND c.TABLE_NAME = ?"
+
+			query := "SELECT t.CONSTRAINT_NAME FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS t JOIN INFORMATION_SCHEMA.CONSTRAINT_COLUMN_USAGE c ON c.CONSTRAINT_NAME=t.CONSTRAINT_NAME WHERE t.CONSTRAINT_TYPE IN ('PRIMARY KEY', 'UNIQUE') AND c.TABLE_CATALOG = ? AND c.TABLE_NAME = ? AND CONSTRAINT_TYPE = ?"
 
 			queryParameters := []interface{}{m.CurrentDatabase(), tableName}
 
@@ -404,15 +405,36 @@ WHERE TABLE_CATALOG = ? AND TABLE_NAME = ?`)
 				query += " AND c.TABLE_SCHEMA = ?"
 				queryParameters = append(queryParameters, schemaName)
 			}
-
+			queryParameters = append(queryParameters, "UNIQUE")
 			columnTypeRows, err := m.DB.Raw(query, queryParameters...).Rows()
+			if err != nil {
+				return err
+			}
+			uniqueContraints := map[string]int{}
+			for columnTypeRows.Next() {
+				var constraintName string
+				columnTypeRows.Scan(&constraintName)
+				uniqueContraints[constraintName]++
+			}
+			_ = columnTypeRows.Close()
+
+			query = "SELECT c.COLUMN_NAME, t.CONSTRAINT_NAME, t.CONSTRAINT_TYPE FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS t JOIN INFORMATION_SCHEMA.CONSTRAINT_COLUMN_USAGE c ON c.CONSTRAINT_NAME=t.CONSTRAINT_NAME WHERE t.CONSTRAINT_TYPE IN ('PRIMARY KEY', 'UNIQUE') AND c.TABLE_CATALOG = ? AND c.TABLE_NAME = ?"
+
+			queryParameters = []interface{}{m.CurrentDatabase(), tableName}
+
+			if schemaName != "" {
+				query += " AND c.TABLE_SCHEMA = ?"
+				queryParameters = append(queryParameters, schemaName)
+			}
+
+			columnTypeRows, err = m.DB.Raw(query, queryParameters...).Rows()
 			if err != nil {
 				return err
 			}
 
 			for columnTypeRows.Next() {
-				var name, columnType string
-				_ = columnTypeRows.Scan(&name, &columnType)
+				var name, constraintName, columnType string
+				_ = columnTypeRows.Scan(&name, &constraintName, &columnType)
 				for idx, c := range columnTypes {
 					mc := c.(migrator.ColumnType)
 					if mc.NameValue.String == name {
@@ -420,7 +442,9 @@ WHERE TABLE_CATALOG = ? AND TABLE_NAME = ?`)
 						case "PRIMARY KEY":
 							mc.PrimaryKeyValue = sql.NullBool{Bool: true, Valid: true}
 						case "UNIQUE":
-							mc.UniqueValue = sql.NullBool{Bool: true, Valid: true}
+							if uniqueContraints[constraintName] == 1 {
+								mc.UniqueValue = sql.NullBool{Bool: true, Valid: true}
+							}
 						}
 						columnTypes[idx] = mc
 						break

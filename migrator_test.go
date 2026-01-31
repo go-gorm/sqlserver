@@ -208,6 +208,36 @@ type TestTableFieldCommentUpdate struct {
 
 func (*TestTableFieldCommentUpdate) TableName() string { return "test_table_field_comment" }
 
+type TestTableFieldUnique struct {
+	ID   string `gorm:"column:id;primaryKey;comment:"` // field comment is an empty string
+	Name string `gorm:"column:name;unique;comment:姓名"`
+	Age  uint   `gorm:"column:age;comment:年龄"`
+}
+
+func (*TestTableFieldUnique) TableName() string { return "test_table_field_unique" }
+
+func TestHasConstraint(t *testing.T) {
+	db, err := gorm.Open(sqlserver.Open(sqlserverDSN))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dm := db.Debug().Migrator()
+	tableModel := new(TestTableFieldUnique)
+	defer func() {
+		if err = dm.DropTable(tableModel); err != nil {
+			t.Errorf("couldn't drop table %q, got error: %v", tableModel.TableName(), err)
+		}
+	}()
+
+	if err = dm.AutoMigrate(tableModel); err != nil {
+		t.Fatal(err)
+	}
+	hasName := dm.HasConstraint(tableModel, "name")
+	if !hasName {
+		t.Fatalf("expected unique")
+	}
+}
+
 func TestMigrator_MigrateColumnComment(t *testing.T) {
 	db, err := gorm.Open(sqlserver.Open(sqlserverDSN))
 	if err != nil {

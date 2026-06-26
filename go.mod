@@ -1,9 +1,9 @@
 module gorm.io/driver/sqlserver
 
-go 1.24.0
+go 1.25.7
 
 require (
-	github.com/microsoft/go-mssqldb v1.9.6
+	github.com/microsoft/go-mssqldb v1.10.0
 	gorm.io/gorm v1.30.0
 )
 
@@ -14,6 +14,6 @@ require (
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
-	golang.org/x/crypto v0.45.0 // indirect
-	golang.org/x/text v0.31.0 // indirect
+	golang.org/x/crypto v0.50.0 // indirect
+	golang.org/x/text v0.36.0 // indirect
 )

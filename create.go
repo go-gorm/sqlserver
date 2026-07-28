@@ -68,7 +68,7 @@ func Create(db *gorm.DB) {
 
 					if setIdentityInsert {
 						db.Statement.WriteString("SET IDENTITY_INSERT ")
-						db.Statement.WriteQuoted(db.Statement.Table)
+						db.Statement.WriteQuoted(clause.Table{Name: clause.CurrentTable})
 						db.Statement.WriteString(" ON;")
 					}
 				}
@@ -112,7 +112,7 @@ func Create(db *gorm.DB) {
 
 			if setIdentityInsert {
 				db.Statement.WriteString("SET IDENTITY_INSERT ")
-				db.Statement.WriteQuoted(db.Statement.Table)
+				db.Statement.WriteQuoted(clause.Table{Name: clause.CurrentTable})
 				db.Statement.WriteString(" OFF;")
 			}
 		}
@@ -143,7 +143,7 @@ func Create(db *gorm.DB) {
 
 func MergeCreate(db *gorm.DB, onConflict clause.OnConflict, values clause.Values) bool {
 	db.Statement.WriteString("MERGE INTO ")
-	db.Statement.WriteQuoted(db.Statement.Table)
+	db.Statement.WriteQuoted(clause.Table{Name: clause.CurrentTable})
 	db.Statement.WriteString(" USING (VALUES")
 	for idx, value := range values.Values {
 		if idx > 0 {

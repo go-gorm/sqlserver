@@ -1,6 +1,7 @@
 package sqlserver
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"regexp"
@@ -21,6 +22,9 @@ type Config struct {
 	DSN               string
 	DefaultStringSize int
 	Conn              gorm.ConnPool
+
+	serverMajorVersion int
+	hasServerVersion   bool
 }
 
 type Dialector struct {
@@ -63,10 +67,122 @@ func (dialector Dialector) Initialize(db *gorm.DB) (err error) {
 		}
 	}
 
+	if err = dialector.detectServerVersion(db); err != nil {
+		// Fall back to the modern OFFSET/FETCH syntax if the version cannot be
+		// determined, but keep the legacy path available for older SQL Server
+		// instances.
+		dialector.serverMajorVersion = 0
+		dialector.hasServerVersion = false
+	}
+
 	for k, v := range dialector.ClauseBuilders() {
 		db.ClauseBuilders[k] = v
 	}
 	return
+}
+
+func (dialector Dialector) supportsOffsetFetch() bool {
+	if !dialector.hasServerVersion {
+		return true
+	}
+	return dialector.serverMajorVersion >= 11
+}
+
+func (dialector Dialector) detectServerVersion(db *gorm.DB) error {
+	if db == nil || db.ConnPool == nil {
+		return nil
+	}
+
+	var version string
+	if err := db.ConnPool.QueryRowContext(context.Background(),
+		"SELECT CAST(SERVERPROPERTY('ProductVersion') AS nvarchar(128))").Scan(&version); err != nil {
+		return err
+	}
+
+	major, ok := parseSQLServerVersion(version)
+	if !ok {
+		return nil
+	}
+
+	dialector.serverMajorVersion = major
+	dialector.hasServerVersion = true
+	return nil
+}
+
+func parseSQLServerVersion(version string) (int, bool) {
+	if version == "" {
+		return 0, false
+	}
+
+	for _, part := range strings.FieldsFunc(version, func(ch rune) bool {
+		switch ch {
+		case '.', ' ', '-', '\t', '\n', '\r', ',', ';':
+			return true
+		default:
+			return false
+		}
+	}) {
+		major, err := strconv.Atoi(part)
+		if err == nil {
+			return major, true
+		}
+	}
+
+	return 0, false
+}
+
+func addTopClause(query string, limit int) string {
+	query = strings.TrimSpace(query)
+	if limit < 0 || query == "" {
+		return query
+	}
+
+	if !strings.HasPrefix(strings.ToUpper(query), "SELECT") {
+		return query
+	}
+
+	return strings.Replace(query, "SELECT", fmt.Sprintf("SELECT TOP (%d)", limit), 1)
+}
+
+func buildLegacyPaginationSQL(query string, offset int, limit *int) string {
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return query
+	}
+
+	var size int
+	unlimited := limit == nil || *limit < 0
+	if !unlimited {
+		size = *limit
+	}
+	if offset == 0 {
+		if unlimited {
+			return query
+		}
+		return addTopClause(query, size)
+	}
+
+	orderByIndex := strings.Index(strings.ToUpper(query), " ORDER BY ")
+	if orderByIndex >= 0 {
+		orderBySQL := strings.TrimSpace(query[orderByIndex:])
+		baseQuery := strings.TrimRight(query[:orderByIndex], " ")
+		upperBound := ""
+		if !unlimited {
+			upperBound = fmt.Sprintf(" AND __gorm_rownum <= %d", offset+size)
+		}
+		return fmt.Sprintf(
+			"SELECT * FROM (SELECT __gorm_wrapped.*, ROW_NUMBER() OVER (%s) AS __gorm_rownum FROM (%s) AS __gorm_wrapped) AS __gorm_paged WHERE __gorm_rownum > %d%s ORDER BY __gorm_rownum",
+			orderBySQL,
+			baseQuery,
+			offset,
+			upperBound,
+		)
+	}
+
+	if unlimited {
+		return query
+	}
+	return addTopClause(query, offset+size)
 }
 
 func (dialector Dialector) ClauseBuilders() map[string]clause.ClauseBuilder {
@@ -83,21 +199,28 @@ func (dialector Dialector) ClauseBuilders() map[string]clause.ClauseBuilder {
 							builder.WriteString("ORDER BY (SELECT NULL) ")
 						}
 					}
-				}
 
-				if limit.Offset > 0 {
-					builder.WriteString("OFFSET ")
-					builder.WriteString(strconv.Itoa(limit.Offset))
-					builder.WriteString(" ROWS")
-				}
-
-				if limit.Limit != nil && *limit.Limit >= 0 {
-					if limit.Offset == 0 {
-						builder.WriteString("OFFSET 0 ROW")
+					if !dialector.supportsOffsetFetch() {
+						rewritten := buildLegacyPaginationSQL(stmt.SQL.String(), limit.Offset, limit.Limit)
+						stmt.SQL.Reset()
+						stmt.SQL.WriteString(rewritten)
+						return
 					}
-					builder.WriteString(" FETCH NEXT ")
-					builder.WriteString(strconv.Itoa(*limit.Limit))
-					builder.WriteString(" ROWS ONLY")
+
+					if limit.Offset > 0 {
+						builder.WriteString("OFFSET ")
+						builder.WriteString(strconv.Itoa(limit.Offset))
+						builder.WriteString(" ROWS")
+					}
+
+					if limit.Limit != nil && *limit.Limit >= 0 {
+						if limit.Offset == 0 {
+							builder.WriteString("OFFSET 0 ROW")
+						}
+						builder.WriteString(" FETCH NEXT ")
+						builder.WriteString(strconv.Itoa(*limit.Limit))
+						builder.WriteString(" ROWS ONLY")
+					}
 				}
 			}
 		},
